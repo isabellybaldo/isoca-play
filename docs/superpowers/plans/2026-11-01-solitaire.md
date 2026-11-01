@@ -98,7 +98,7 @@ Same command. Expected: PASS.
 
 - [ ] **Step 6: Write the shared-case tests**
 
-In `rules.test.ts`, `the shared walks agree with Python`: replay each walk with `applyMove`. A step is valid exactly when the object changed; the final fields equal the record; then `undo` to the start restores `newSolitaire(deal)` apart from nothing.
+In `rules.test.ts`, `the shared walks agree with Python`: replay each walk with `applyMove`. A step is valid exactly when the object changed; the final fields equal the record; then `undo` back to the start equals `newSolitaire(deal)`.
 
 In `test_solitaire.py`, `test_shared_walks_replay` does the same with `apply_move`, and `test_shared_walks_are_up_to_date` regenerates and compares with the committed file.
 
