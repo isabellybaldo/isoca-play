@@ -11,21 +11,17 @@ A type is a specific setup, and each one belongs to one difficulty.
 |  [ easy ] [ medium ] [=hard=]  <- pick the difficulty first
 |                             |
 |  HARD TYPES        [random] |  <- random picks from this list
-|  +-------+ +-------+        |
-|  | [   ] | |  \_/  |        |
-|  | frame | | trophy|        |
-|  +-------+ +-------+        |
-|  +-------+ +-------+        |
-|  |  (@)  | | [] [] |        |
-|  |nautil.| |  fort |        |
-|  +-------+ +-------+        |
+|  +-------+                  |
+|  | [] [] |                  |
+|  |  fort |                  |
+|  +-------+                  |
 |                             |
 |  tap a type to start        |
 +-----------------------------+
 
-easy     flat shapes, many tiles free
-medium   some stacking
-hard     tall, tight stacks, few tiles free
+easy     frame    barely stacked, 2 layers
+medium   trophy   some stacking, 3 layers
+hard     fort     taller stacks, 4 layers
 ```
 
 ## 1. The screen (phone)
@@ -36,14 +32,14 @@ hard     tall, tight stacks, few tiles free
 |                             |
 |  SLOTS                      |
 |  +-----+-----+-----+-----+  |
-|  | cat | sun |     |     |  |  <- your 4 slots
+|  | cat | fish|     |     |  |  <- your 4 slots
 |  +-----+-----+-----+-----+  |
 |                             |
 |  BOARD                      |
 |       +-----+-----+         |
 |       | ### | ### |         |  <- top layer
 |    +--+--+--+--+--+--+      |
-|    |star | ### |moon |      |
+|    |frog | ### |plum |      |
 |    +-----+-----+-----+      |
 |    | ### |heart| ### |      |
 |    +-----+-----+-----+      |
@@ -51,8 +47,8 @@ hard     tall, tight stacks, few tiles free
 |  [return]  [new game]       |  <- return takes back a move; new game is [guess]
 +-----------------------------+
 
-  cat, sun, star...  pixel tile you can see and click
-  ###                hidden tile, can't be clicked yet
+  cat, fish, frog...  pixel tile you can see and click
+  ###                 hidden tile, shows its rose back, can't be clicked yet
 ```
 
 ## 2. The slot rule
@@ -77,20 +73,34 @@ Safe: the 4th tile makes a pair.
 
 ```
 click cat    [cat][   ][   ][   ]
-click sun    [cat][sun][   ][   ]
-click star   [cat][sun][star][   ]   3 with no pair: fine
-click sun    [cat][sun][star][sun]   4th makes a pair
-             [cat][star][   ][   ]   pair gone, play on
+click fish   [cat][fish][   ][   ]
+click frog   [cat][fish][frog][   ]   3 with no pair: fine
+click fish   [cat][fish][frog][fish]  4th makes a pair
+             [cat][frog][   ][   ]    pair gone, play on
 ```
 
 Lost: the 4th tile makes no pair.
 
 ```
-             [cat][sun][star][   ]
-click moon   [cat][sun][star][moon]  full, no pair: GAME OVER
+             [cat][fish][frog][   ]
+click plum   [cat][fish][frog][plum]  full, no pair: GAME OVER
+```
+
+What makes a pair: any season with any season, any flower with any flower, and
+anything else only with itself.
+
+```
+             [spring][   ][   ][   ]
+click winter [   ][   ][   ][   ]      two seasons: a pair
+
+             [spring][   ][   ][   ]
+click rose   [spring][rose][   ][   ]  a season and a flower: no pair
 ```
 
 ## 3. Hidden tiles
+
+An upper tile sits half a tile over the tiles below, never exactly on top, so the
+covered tiles show their rose backs.
 
 ```
 BEFORE                     AFTER clicking the top tile
@@ -98,13 +108,12 @@ BEFORE                     AFTER clicking the top tile
       +-----+
       | cat |   on top           (moved to a slot)
    +--+--+--+--+            +-----+-----+
-   | ### | ### |  covered   | sun | ### |   sun is free, so it shows
+   | ### | ### |  covered   | fish| frog|   nothing on them, so they show
    +-----+-----+            +-----+-----+
-                                    ^ [guess] still partly covered
 ```
 
-[guess] A tile stays hidden while another tile sits on it, and turns face up
-once it's free to click.
+A tile stays hidden while another tile lies on any part of it, and turns face up
+once nothing does. It can still be blocked at both sides, and then it is dimmed.
 
 ## 4. How a game ends
 
@@ -128,4 +137,3 @@ once it's free to click.
 ## Not drawn yet
 
 - The login page
-- The pixel tile art

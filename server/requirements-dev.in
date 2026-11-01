@@ -1,0 +1,4 @@
+# Test tools, constrained to the runtime pins.
+-c requirements.txt
+httpx
+pytest

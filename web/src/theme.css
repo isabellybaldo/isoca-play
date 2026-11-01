@@ -1,0 +1,177 @@
+:root {
+  --page: #120a1a;
+  --bg: #1b1026;
+  --card: #241532;
+  --bar: #2a1838;
+  --line: #93e1d8;
+  --line2: #4b3a5c;
+  --fg: #ddfff7;
+  --accent: #ffa69e;
+  --rose: #aa4465;
+  --dim: #b9a6c9;
+  --px: 'Press Start 2P', monospace;
+  --big: 'VT323', monospace;
+  --body: 'IBM Plex Mono', ui-monospace, monospace;
+  --tap: 44px;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  /* A fast double-tap must select and send a tile, never zoom the page. */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html, body { background: var(--page); color: var(--fg); }
+body { font-family: var(--body); font-size: 15px; line-height: 1.5; min-height: 100dvh; }
+
+button:disabled { cursor: default; opacity: 0.45; }
+
+button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+:focus-visible { outline: 2px dashed var(--accent); outline-offset: 2px; }
+
+/* Shared by every screen */
+.shell { max-width: 880px; margin: 0 auto; padding: 16px; }
+
+.back {
+  font-family: var(--px);
+  font-size: 9px;
+  padding: 0 12px;
+  border: 3px solid var(--line);
+  background: var(--bar);
+  box-shadow: 3px 3px 0 var(--line);
+}
+.back:active { transform: translate(3px, 3px); box-shadow: none; }
+
+.back.resume { display: block; width: calc(100% - 3px); margin-bottom: 16px; text-align: left; line-height: 1.5; }
+
+/* A tile: the 18 x 23 sprite at a whole-number scale, so 36 x 46 here, 54 x 69 where
+   a rule or the board says so. Its outline and edge are part of the drawing. The board
+   sets a tile's size itself, sometimes under --tap, so it opts out of the button floor. */
+.pixels { display: block; width: 100%; height: 100%; }
+.tile {
+  display: block;
+  width: 36px;
+  height: 46px;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Home */
+.home-title {
+  font-family: var(--px);
+  font-size: clamp(20px, 7vw, 40px);
+  line-height: 1.3;
+  font-weight: 400;
+  margin: 12px 0 28px;
+  text-shadow: 3px 3px 0 var(--rose);
+}
+.games { display: grid; gap: 24px; padding-right: 6px; }
+@media (min-width: 640px) {
+  .games { grid-template-columns: 1fr 1fr; }
+}
+
+.game {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+  padding: 16px;
+  text-align: left;
+  background: var(--card);
+  border: 3px solid var(--line);
+  box-shadow: 6px 6px 0 var(--line);
+}
+.game.sudoku { border-color: var(--accent); box-shadow: 6px 6px 0 var(--accent); }
+.game:active { transform: translate(6px, 6px); box-shadow: none; }
+
+.game-art { display: block; height: 138px; position: relative; }
+.game-name { display: block; font-family: var(--px); font-size: 16px; line-height: 1.4; }
+.game-line { display: block; font-family: var(--big); font-size: 24px; line-height: 1.1; color: var(--dim); }
+
+/* A loose heap of tiles, each lying over the last */
+.heap { position: absolute; width: 54px; height: 69px; }
+.heap:nth-child(1) { left: 0; top: 48px; }
+.heap:nth-child(2) { left: 44px; top: 12px; }
+.heap:nth-child(3) { left: 92px; top: 56px; }
+.heap:nth-child(4) { left: 136px; top: 8px; }
+
+/* A corner of a sudoku board, with a tile sitting in one cell */
+.mini {
+  display: grid;
+  grid-template-columns: repeat(3, 44px);
+  grid-auto-rows: 44px;
+  width: max-content;
+  border: 3px solid var(--line);
+  background: var(--bg);
+}
+.mini span {
+  display: grid;
+  place-items: center;
+  font-family: var(--big);
+  font-size: 32px;
+  line-height: 1;
+  color: var(--fg);
+  border: 1px solid var(--line2);
+}
+.mini span.quiet { color: var(--dim); }
+.mini span .pixels { width: 32px; height: 32px; }
+
+/* The question before a new game */
+.dialog-veil {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgb(18 10 26 / 0.82);
+}
+.dialog {
+  width: min(320px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  background: var(--card);
+  border: 3px solid var(--accent);
+  box-shadow: 6px 6px 0 var(--accent);
+}
+.dialog h2 { font-family: var(--px); font-size: 12px; line-height: 1.5; font-weight: 400; }
+.dialog p { font-family: var(--big); font-size: 22px; line-height: 1.1; color: var(--dim); }
+.dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; padding-right: 3px; }
+.dialog-actions .back { flex: 1 1 auto; }
+.dialog-confirm { border-color: var(--accent); background: var(--rose); box-shadow: 3px 3px 0 var(--accent); }
+
+/* A short line under the buttons: why a new game can't start right now */
+.start-note { margin-top: 12px; font-family: var(--big); font-size: 22px; line-height: 1.1; color: var(--dim); }
+
+.home-foot { margin-top: 28px; }
+
+/* Saving: nothing to see while it goes well, and small when it doesn't */
+.save-status { position: fixed; left: 8px; bottom: 8px; z-index: 5; pointer-events: none; }
+.save-marker {
+  padding: 2px 8px;
+  font-family: var(--big);
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--dim);
+  background: var(--bar);
+  border: 1px solid var(--line2);
+}
+.save-marker a { color: var(--accent); pointer-events: auto; }
+
+.boundary-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }

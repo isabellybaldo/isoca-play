@@ -1,0 +1,153 @@
+/* Shared */
+.back:disabled {
+  opacity: 0.4;
+  box-shadow: none;
+  cursor: default;
+}
+.back:disabled:active { transform: none; }
+
+.mj-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Setup */
+.mj-setup { max-width: 520px; }
+.mj-title {
+  font-family: var(--px);
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 400;
+  margin: 20px 0 16px;
+  text-shadow: 2px 2px 0 var(--rose);
+}
+
+.mj-levels { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-right: 3px; }
+.mj-level {
+  font-family: var(--px);
+  font-size: 9px;
+  border: 3px solid var(--line2);
+  background: var(--bg);
+  color: var(--dim);
+}
+.mj-level[aria-pressed='true'] {
+  border-color: var(--line);
+  background: var(--line);
+  color: var(--bg);
+  box-shadow: 3px 3px 0 var(--rose);
+}
+
+.mj-types-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 24px;
+  padding-right: 3px;
+}
+.mj-types-head h2 { font-family: var(--big); font-size: 28px; line-height: 1.1; font-weight: 400; }
+.mj-line { font-family: var(--big); font-size: 22px; line-height: 1.1; color: var(--dim); margin-top: 8px; }
+
+.mj-types {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0;
+  padding-right: 5px;
+}
+.mj-type {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  padding: 12px;
+  text-align: left;
+  background: var(--card);
+  border: 3px solid var(--line);
+  box-shadow: 5px 5px 0 var(--line);
+}
+.mj-type:active { transform: translate(5px, 5px); box-shadow: none; }
+.mj-shape { display: block; width: 100%; max-width: 104px; height: auto; margin-bottom: 8px; }
+.mj-type-name { font-family: var(--px); font-size: 11px; line-height: 1.4; }
+.mj-type-count { font-family: var(--big); font-size: 20px; line-height: 1; color: var(--dim); }
+
+/* Game: every row is sized so the tallest board still fits a 320x568 phone.
+   The screen reaches the foot of the page, so a tap anywhere can clear a selection. */
+.mj-screen { min-height: 100dvh; }
+.shell.mj-game {
+  max-width: 464px; /* 8 tiles at 54 px, and the padding */
+  display: grid;
+  gap: 8px;
+  padding-block: 12px;
+}
+
+.mj-bar { display: flex; align-items: center; justify-content: space-between; padding-right: 3px; }
+.mj-moves { font-family: var(--big); font-size: 24px; line-height: 1; }
+
+.mj-slots { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.mj-slots-name { font-family: var(--big); font-size: 22px; line-height: 1; color: var(--dim); }
+.mj-slot-row { display: flex; gap: 6px; list-style: none; }
+.mj-slot {
+  position: relative;
+  width: 44px;
+  height: 54px;
+  padding: 2px;
+  border: 2px dashed var(--line2);
+  background: var(--bg);
+}
+
+.mj-board { position: relative; margin: 0 auto; }
+.mj-board > .tile { position: absolute; }
+.mj-board > .tile.back-face { cursor: default; }
+
+/* Face up, blocked at both sides: the same tile with the light turned down. */
+.mj-board > .tile.is-blocked { cursor: default; }
+.mj-board > .tile.is-blocked .pixels { filter: brightness(0.5) saturate(0.55); }
+
+/* Selected: a doubled yellow frame, lifted off the board, over its neighbours.
+   Only the look is lifted. The button stays in its box and paint order, and the
+   frame and face catch no taps, so tiles under the frame can still be tapped. */
+.mj-board > .tile.is-selected { background: #ffd166; }
+.mj-board > .tile.is-selected::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 1;
+  border: 1px solid var(--page);
+  background: #ffd166;
+  box-shadow: 0 0 0 2px var(--page), 0 0 0 5px #ffd166;
+  transform: translate(-1px, -2px);
+  pointer-events: none;
+}
+.mj-board > .tile.is-selected .pixels {
+  position: relative;
+  z-index: 2;
+  transform: translate(-1px, -2px);
+  pointer-events: none;
+}
+
+.mj-actions { display: flex; justify-content: space-between; padding-right: 3px; }
+
+/* The end of a game: sits over the board, leaving the slots and buttons in view. */
+.mj-end {
+  position: absolute;
+  z-index: 3;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(248px, 100%);
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  padding: 16px;
+  text-align: center;
+  background: var(--card);
+  border: 3px solid var(--line);
+  box-shadow: 5px 5px 0 var(--line);
+}
+.mj-end.is-lost { border-color: var(--accent); box-shadow: 5px 5px 0 var(--accent); }
+.mj-end-title { font-family: var(--px); font-size: 14px; line-height: 1.4; }
+.mj-end-line { font-family: var(--big); font-size: 20px; line-height: 1.1; color: var(--dim); }

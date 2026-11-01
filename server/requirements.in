@@ -1,0 +1,6 @@
+# Runtime dependencies. Compile with Python 3.10 (the oldest we support) so the
+# pins also install on 3.12; exceptiongroup is only needed below 3.11.
+fastapi
+uvicorn
+argon2-cffi
+exceptiongroup; python_version < "3.11"

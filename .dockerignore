@@ -1,0 +1,17 @@
+# Allow-list: anything new stays out of the build until it is named here.
+*
+!shared/
+!web/package.json
+!web/package-lock.json
+!web/index.html
+!web/tsconfig.json
+!web/vite.config.ts
+!web/public/
+!web/src/
+!server/requirements.txt
+!server/requirements-build.txt
+!server/pyproject.toml
+!server/isoca_play/
+**/__pycache__
+**/*.pyc
+**/*.egg-info

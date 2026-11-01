@@ -1,0 +1,131 @@
+/* Level choice */
+.sd-setup { max-width: 520px; }
+.sd-title {
+  font-family: var(--px);
+  font-size: 20px;
+  line-height: 1.4;
+  font-weight: 400;
+  margin: 20px 0 16px;
+  text-shadow: 2px 2px 0 var(--accent);
+}
+.sd-levels { display: grid; gap: 16px; padding-right: 5px; }
+.sd-levelbtn {
+  display: grid;
+  gap: 4px;
+  justify-items: start;
+  padding: 12px;
+  text-align: left;
+  background: var(--card);
+  border: 3px solid var(--accent);
+  box-shadow: 5px 5px 0 var(--accent);
+}
+.sd-levelbtn:active { transform: translate(5px, 5px); box-shadow: none; }
+.sd-levelname { font-family: var(--px); font-size: 11px; line-height: 1.4; }
+.sd-levelline { font-family: var(--big); font-size: 20px; line-height: 1.1; color: var(--dim); }
+.sd-hint { font-family: var(--big); font-size: 22px; line-height: 1.1; color: var(--dim); margin-top: 16px; }
+
+/* Game: the 9 columns and the number row fit 320 px with a 4 px margin each side. */
+.shell.sd-game {
+  max-width: 440px;
+  display: grid;
+  gap: 8px;
+  padding: 8px 4px;
+}
+
+.sd-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 3px; }
+.sd-level { font-family: var(--big); font-size: 26px; line-height: 1; }
+
+.sd-board {
+  display: grid;
+  grid-template-columns: repeat(9, minmax(0, 1fr));
+  border: 3px solid var(--line);
+  background: var(--bg);
+}
+
+.cell {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  min-height: 0;
+  aspect-ratio: 1;
+  padding: 0;
+  border: 0 solid var(--line);
+  border-style: solid;
+  border-color: var(--line2);
+  /* thick box lines are drawn by the widths set on each square */
+  background: var(--bg);
+  color: var(--line);
+  overflow: hidden;
+}
+.cell:focus-visible { outline-offset: -3px; }
+/* a given is pale on a raised ground; a written number is teal on the plain one */
+.cell.is-given { background: var(--bar); color: var(--fg); }
+.cell.is-written { color: var(--line); }
+.cell.is-selected { background: #ffd166; color: var(--page); }
+.cell .value { font-family: var(--big); font-size: 30px; line-height: 1; }
+.cell.is-given .value { font-weight: 700; text-shadow: 0.5px 0 0 currentColor; }
+
+/* Notes: a 3 by 3 grid with a fixed place for each digit */
+.notes {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(3, 1fr);
+  width: 100%;
+  height: 100%;
+  padding: 1px;
+}
+.notes > span {
+  display: grid;
+  place-items: center;
+  font-family: var(--body);
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.sd-note {
+  min-height: 28px;
+  font-family: var(--px);
+  font-size: 11px;
+  line-height: 28px;
+  text-align: center;
+  color: var(--accent);
+}
+
+.sd-controls { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding-right: 3px; }
+
+/* The write/notes switch: the lit half is the mode you are in */
+.sd-modes { display: flex; }
+.sd-mode {
+  font-family: var(--px);
+  font-size: 9px;
+  padding: 0 12px;
+  border: 3px solid var(--line2);
+  background: var(--bg);
+  color: var(--dim);
+}
+.sd-mode + .sd-mode { margin-left: -3px; }
+.sd-mode[aria-pressed='true'] {
+  position: relative;
+  border-color: var(--line);
+  background: var(--line);
+  color: var(--bg);
+  box-shadow: 3px 3px 0 var(--rose);
+}
+.sd-mode[aria-pressed='true']::before { content: '> '; }
+
+/* One row of nine, 34 px wide or more at 320 px; the frame turns dashed in notes mode. */
+.sd-pad { display: flex; padding: 0; }
+.sd-pad button {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 48px;
+  font-family: var(--big);
+  font-size: 30px;
+  line-height: 1;
+  background: var(--bar);
+  border: 2px solid var(--line);
+}
+.sd-pad button + button { margin-left: -2px; }
+.sd-pad button:active { background: var(--line); color: var(--bg); }
+.sd-pad.is-notes button { border-style: dashed; border-color: var(--accent); font-size: 22px; color: var(--accent); }
