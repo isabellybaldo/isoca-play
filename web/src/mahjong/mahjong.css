@@ -132,6 +132,12 @@
   pointer-events: none;
 }
 
+/* Tip: a dashed pink frame on the tiles it names, nothing written. The line wraps inside the phone width. */
+.mj-board > .tile.is-tip { outline: 3px dashed var(--accent); outline-offset: -3px; }
+.mj-tip { text-align: center; line-height: 1.7; padding: 2px 4px; overflow-wrap: anywhere; }
+.mj-tip.is-empty { display: none; }
+.mj-tipbtns { display: flex; justify-content: center; gap: 8px; }
+
 .mj-actions { display: flex; justify-content: space-between; padding-right: 3px; }
 
 /* The end of a game: sits over the board, leaving the slots and buttons in view. */
