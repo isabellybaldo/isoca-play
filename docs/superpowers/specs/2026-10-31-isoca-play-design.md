@@ -279,6 +279,22 @@ A builder cannot judge either, so the work stops for the owner at each check.
 4. **The rest.** The remaining shapes and the final tile art, with the owner's look at
    each batch.
 
+## Existing open source to check first (call)
+
+No project found on 2026-10-31 has the 4-slot game or the no-warnings sudoku, so the
+games are written here. Two parts may not need writing. Only READMEs and licenses
+were read; none of these has been run.
+
+- **Sudoku grading, server stage.** Try `huangsam/rustoku` first (MIT, Rust core with
+  Python bindings, generates by difficulty), checking that its levels really follow
+  the techniques needed. Fall back to `GillesArcas/sudosol` (MIT, pure Python, human
+  techniques including X-wing, a solver only) under a small generator of our own.
+- **Mahjong deals.** `gamefancreator/mahjong-solvable-deal` (MIT, no stars yet) builds
+  deals backwards, the approach this design already uses. It is a reference only, as
+  the rule is short and the 4-slot tuning is specific to this game.
+- **Not used.** `ffalt/mahseum` (layouts, non-standard license) and GPL projects such
+  as KMahjongg and `dokusan`, which do not fit an MIT repo.
+
 ## Left to the builder
 
 - Tile set size and the pixel art itself, as long as it is original.
