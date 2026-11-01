@@ -3,9 +3,9 @@ import { layoutsFor, type Layout, type Level } from './layouts';
 import './mahjong.css';
 
 const LEVELS: { id: Level; name: string; line: string }[] = [
-  { id: 'easy', name: 'Easy', line: 'Flat shapes, many tiles free.' },
+  { id: 'easy', name: 'Easy', line: 'Flat shapes.' },
   { id: 'medium', name: 'Medium', line: 'Some stacking.' },
-  { id: 'hard', name: 'Hard', line: 'Tall, tight stacks, few tiles free.' },
+  { id: 'hard', name: 'Hard', line: 'Taller stacks.' },
 ];
 
 // The shape seen from above: the higher the stack at a spot, the brighter it is.

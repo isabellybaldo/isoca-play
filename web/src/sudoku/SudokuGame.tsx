@@ -7,9 +7,9 @@ import { hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, type 
 import './sudoku.css';
 
 const LEVELS: { id: Level; name: string; line: string }[] = [
-  { id: 'easy', name: 'Easy', line: 'Many numbers given. The simple rules are enough.' },
+  { id: 'easy', name: 'Easy', line: 'Most numbers given.' },
   { id: 'medium', name: 'Medium', line: 'Fewer numbers given.' },
-  { id: 'hard', name: 'Hard', line: 'Few numbers given. Needs the harder sudoku rules.' },
+  { id: 'hard', name: 'Hard', line: 'Fewest numbers given.' },
 ];
 
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
@@ -86,7 +86,6 @@ function Game({
 }) {
   const level = state.puzzle.level;
   const [asking, setAsking] = useState(false);
-  const won = state.status === 'won';
   const deal = () => {
     const next = newSudoku(pick(level, state.puzzle));
     onChange(() => next);
@@ -103,8 +102,8 @@ function Game({
             type="button"
             className="back"
             onClick={() => {
-              if (won) deal();
-              else setAsking(true);
+              if (hasMovesToLose(state)) setAsking(true);
+              else deal();
             }}
           >
             New game
@@ -143,7 +142,7 @@ function Game({
           <button
             type="button"
             className="back"
-            disabled={state.history.length === 0 || won}
+            disabled={state.history.length === 0}
             onClick={() => onChange(undo)}
           >
             Return

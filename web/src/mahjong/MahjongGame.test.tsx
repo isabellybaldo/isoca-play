@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { readFileSync } from 'node:fs';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
@@ -104,6 +105,16 @@ describe('setup', () => {
     expect(onStart).toHaveBeenLastCalledWith(layoutsFor('medium')[0]);
   });
 
+  test.each([
+    ['easy', 'Flat shapes.'],
+    ['medium', 'Some stacking.'],
+    ['hard', 'Taller stacks.'],
+  ] as const)('the %s line says only how the shape stacks', (level, line) => {
+    render(<MahjongSetup level={level} onLevel={vi.fn()} onStart={vi.fn()} onBack={vi.fn()} />);
+    expect(screen.getByText(line)).toBeTruthy();
+    expect(screen.queryByText(/free/)).toBeNull();
+  });
+
   test('tapping a type starts it, and back goes home', async () => {
     const { user, onStart, onBack } = setup();
     await user.click(screen.getByRole('button', { name: /^Frame/ }));
@@ -207,6 +218,78 @@ describe('the slot rule', () => {
   });
 });
 
+describe('tapping away', () => {
+  const isSelected = () => tileButton('Moon tile').getAttribute('aria-pressed') === 'true';
+
+  test('the slots row clears the selection, and so do its tiles', async () => {
+    const { user } = play(apart(['moon', 'sun', 'star']));
+    await user.dblClick(tileButton('Star tile'));
+    await user.click(tileButton('Moon tile'));
+    await user.click(screen.getByRole('list', { name: 'Slots' }));
+    expect(isSelected()).toBe(false);
+
+    await user.click(tileButton('Moon tile'));
+    await user.click(slots()[0].querySelector('.tile')!);
+    expect(isSelected()).toBe(false);
+  });
+
+  test('the area below the buttons clears the selection', async () => {
+    const { user, container } = play(apart(['moon', 'sun']));
+    await user.click(tileButton('Moon tile'));
+    await user.click(container.querySelector('.mj-screen')!);
+    expect(isSelected()).toBe(false);
+  });
+
+  test('the bar and the row of buttons clear it, the buttons themselves do not', async () => {
+    const { user, container } = play(apart(['moon', 'sun', 'star']));
+    await user.dblClick(tileButton('Star tile'));
+    await user.click(tileButton('Moon tile'));
+
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }));
+    expect(isSelected()).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    await user.click(screen.getByRole('button', { name: 'Keep playing' }));
+    expect(isSelected()).toBe(true);
+
+    await user.click(container.querySelector('.mj-actions')!);
+    expect(isSelected()).toBe(false);
+  });
+
+  test('the wrapper covers the whole screen, with a react handler and no document listener', () => {
+    const add = vi.spyOn(document, 'addEventListener');
+    const { container } = play(apart(['moon', 'sun']));
+    expect(container.querySelector('.mj-screen main')).not.toBeNull();
+    expect(add.mock.calls.filter(([type]) => type === 'click')).toEqual([]);
+    const css = readFileSync('src/mahjong/mahjong.css', 'utf8');
+    expect(css).toMatch(/\.mj-screen\s*\{[^}]*min-height:\s*100dvh/);
+  });
+});
+
+describe('the selected tile', () => {
+  // Hit-testing needs a browser (see the report); this holds the rule in the stylesheet.
+  const css = readFileSync('src/mahjong/mahjong.css', 'utf8');
+  const rule = (selector: string) => {
+    const at = css.indexOf(`${selector} {`);
+    expect(at).toBeGreaterThanOrEqual(0);
+    return css.slice(at, css.indexOf('}', at));
+  };
+
+  test('keeps its box in place and in paint order', () => {
+    const own = rule('.mj-board > .tile.is-selected');
+    expect(own).not.toMatch(/transform|z-index|box-shadow:\s*0 0/);
+  });
+
+  test('shows the raised frame and face on layers that catch no taps', () => {
+    const frame = rule('.mj-board > .tile.is-selected::before');
+    expect(frame).toMatch(/pointer-events:\s*none/);
+    expect(frame).toMatch(/transform: translate\(-1px, -2px\)/);
+    expect(frame).toMatch(/0 0 0 5px #ffd166/);
+    const face = rule('.mj-board > .tile.is-selected .pixels');
+    expect(face).toMatch(/pointer-events:\s*none/);
+    expect(face).toMatch(/transform: translate\(-1px, -2px\)/);
+  });
+});
+
 describe('the end of a game', () => {
   test('a losing send shows lost, and return takes it back', async () => {
     const { user } = play(apart(['moon', 'sun', 'star', 'gem']));
@@ -295,19 +378,47 @@ describe('leaving and starting over', () => {
     expect(vi.mocked(makeDeal).mock.calls.length).toBe(deals);
   });
 
-  test.each([
-    ['won', ['moon', 'moon']],
-    ['lost', ['moon', 'sun', 'star', 'gem']],
-  ])('new game does not ask once the game is %s', async (_end: string, faces: string[]) => {
-    const { user } = play(apart(faces));
+  async function finish(user: ReturnType<typeof userEvent.setup>) {
     while (screen.getByRole('status').textContent === '') {
       await user.dblClick(screen.getAllByRole('button', { name: / tile$/ })[0]);
     }
+  }
+
+  test('new game does not ask once the game is won', async () => {
+    const { user } = play(apart(['moon', 'moon']));
+    await finish(user);
     vi.mocked(makeDeal).mockReturnValue(apart(['gem', 'leaf']));
     await user.click(screen.getByRole('button', { name: 'New game' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(tileButton('Leaf tile')).toBeTruthy();
     expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  test('new game asks on a lost game, which return could still save', async () => {
+    const { user } = play(apart(['moon', 'sun', 'star', 'gem']));
+    await finish(user);
+    expect(screen.getByRole('status').textContent).toContain('You lost');
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    expect(screen.getByRole('status').textContent).toContain('You lost');
+
+    vi.mocked(makeDeal).mockReturnValue(apart(['leaf', 'cat']));
+    await user.click(screen.getByRole('button', { name: 'Start new game' }));
+    expect(tileButton('Leaf tile')).toBeTruthy();
+    expect(screen.getByRole('status').textContent).toBe('');
+  });
+
+  test('new game does not ask before the first move, or once every move is taken back', async () => {
+    const { user } = play(apart(['moon', 'sun']));
+    vi.mocked(makeDeal).mockReturnValue(apart(['gem', 'leaf']));
+    await user.click(tileButton('Moon tile')); // only a selection, not a move
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(tileButton('Leaf tile')).toBeTruthy();
+
+    await user.dblClick(tileButton('Leaf tile'));
+    await user.click(screen.getByRole('button', { name: 'Return' }));
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   test('a new deal seed comes from Math.random, for the layout in play', () => {

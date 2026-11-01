@@ -74,7 +74,9 @@
 .mj-type-name { font-family: var(--px); font-size: 11px; line-height: 1.4; }
 .mj-type-count { font-family: var(--big); font-size: 20px; line-height: 1; color: var(--dim); }
 
-/* Game: every row is sized so the tallest board still fits a 320x568 phone. */
+/* Game: every row is sized so the tallest board still fits a 320x568 phone.
+   The screen reaches the foot of the page, so a tap anywhere can clear a selection. */
+.mj-screen { min-height: 100dvh; }
 .shell.mj-game {
   max-width: 440px;
   display: grid;
@@ -121,12 +123,26 @@
 /* An upper tile casts no shadow, so the edge of the face-down tile under it shows. */
 .mj-board > .tile.is-raised { box-shadow: none; }
 
-/* Selected: a doubled yellow frame, lifted off the board, over its neighbours. */
-.mj-board > .tile.is-selected {
+/* Selected: a doubled yellow frame, lifted off the board, over its neighbours.
+   Only the look is lifted. The button stays in its box and paint order, and the
+   frame and face catch no taps, so tiles under the frame can still be tapped. */
+.mj-board > .tile.is-selected { background: #ffd166; box-shadow: none; }
+.mj-board > .tile.is-selected::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
   z-index: 1;
+  border: 1px solid var(--page);
   background: #ffd166;
   box-shadow: 0 0 0 2px var(--page), 0 0 0 5px #ffd166;
   transform: translate(-1px, -2px);
+  pointer-events: none;
+}
+.mj-board > .tile.is-selected .pixels {
+  position: relative;
+  z-index: 2;
+  transform: translate(-1px, -2px);
+  pointer-events: none;
 }
 
 .mj-actions { display: flex; justify-content: space-between; padding-right: 3px; }
@@ -134,7 +150,7 @@
 /* The end of a game: sits over the board, leaving the slots and buttons in view. */
 .mj-end {
   position: absolute;
-  z-index: 2;
+  z-index: 3;
   left: 50%;
   top: 50%;
   transform: translate(-50%, -50%);

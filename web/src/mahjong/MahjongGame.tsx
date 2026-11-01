@@ -4,6 +4,7 @@ import { boardBox, tilePosition, tileWidth } from './boardSize';
 import { makeDeal } from './deal';
 import type { Layout } from './layouts';
 import {
+  hasMovesToLose,
   isCovered,
   isFree,
   newGame,
@@ -28,6 +29,12 @@ export function dealGame(layout: Layout): MahjongState {
   return newGame(makeDeal(layout, Math.floor(Math.random() * 2 ** 32)));
 }
 
+// A button does its own job and is not a tap away from the selected tile.
+const own = (action: () => void) => (event: MouseEvent) => {
+  event.stopPropagation();
+  action();
+};
+
 function capitalised(word: string): string {
   return word.charAt(0).toUpperCase() + word.slice(1);
 }
@@ -49,10 +56,7 @@ function BoardTile({
 }) {
   const style = { left, top, width, height: width };
   const base = tile.z > 0 ? 'tile is-raised' : 'tile';
-  const click = (event: MouseEvent) => {
-    event.stopPropagation(); // a tile is not the empty board
-    onTap(tile.id);
-  };
+  const click = own(() => onTap(tile.id));
 
   // The face stays out of the page until nothing lies on the tile.
   if (isCovered(state, tile.id)) {
@@ -153,68 +157,69 @@ export default function MahjongGame({
 
   return (
     <>
-      <main className="shell mj-game" inert={asking}>
-        <div className="mj-bar">
-          <button type="button" className="back" aria-label="Back to setup" onClick={onBack}>Back</button>
-          <span className="mj-moves">Moves: {state.history.length}</span>
-        </div>
+      <div className="mj-screen" onClick={() => onChange(tapElsewhere)}>
+        <main className="shell mj-game" inert={asking}>
+          <div className="mj-bar">
+            <button type="button" className="back" aria-label="Back to setup" onClick={own(onBack)}>Back</button>
+            <span className="mj-moves">Moves: {state.history.length}</span>
+          </div>
 
-        <div className="mj-slots">
-          <span className="mj-slots-name" id="mj-slots-name">Slots</span>
-          <ol className="mj-slot-row" aria-labelledby="mj-slots-name">
-            {Array.from({ length: SLOT_COUNT }, (_, i) => (
-              <li key={i} className="mj-slot">
-                {held[i] ? (
-                  <span className="tile"><TileArt face={held[i].face} /></span>
-                ) : (
-                  <span className="mj-sr">Empty</span>
-                )}
-              </li>
+          <div className="mj-slots">
+            <span className="mj-slots-name" id="mj-slots-name">Slots</span>
+            <ol className="mj-slot-row" aria-labelledby="mj-slots-name">
+              {Array.from({ length: SLOT_COUNT }, (_, i) => (
+                <li key={i} className="mj-slot">
+                  {held[i] ? (
+                    <span className="tile"><TileArt face={held[i].face} /></span>
+                  ) : (
+                    <span className="mj-sr">Empty</span>
+                  )}
+                </li>
+              ))}
+            </ol>
+          </div>
+
+          <div
+            className="mj-board"
+            role="group"
+            aria-label="Board"
+            style={{ width: box.width, height: box.height }}
+          >
+            {tiles.map((tile) => (
+              <BoardTile
+                key={tile.id}
+                state={state}
+                tile={tile}
+                width={width}
+                {...tilePosition(tile, layout, width)}
+                onTap={(id) => onChange((s) => tap(s, id))}
+              />
             ))}
-          </ol>
-        </div>
+            <div role="status"><EndNote state={state} /></div>
+          </div>
 
-        <div
-          className="mj-board"
-          role="group"
-          aria-label="Board"
-          style={{ width: box.width, height: box.height }}
-          onClick={() => onChange(tapElsewhere)}
-        >
-          {tiles.map((tile) => (
-            <BoardTile
-              key={tile.id}
-              state={state}
-              tile={tile}
-              width={width}
-              {...tilePosition(tile, layout, width)}
-              onTap={(id) => onChange((s) => tap(s, id))}
-            />
-          ))}
-          <div role="status"><EndNote state={state} /></div>
-        </div>
-
-        <div className="mj-actions">
-          <button
-            type="button"
-            className="back"
-            disabled={state.history.length === 0}
-            onClick={() => onChange(undo)}
-          >
-            Return
-          </button>
-          <button
-            type="button"
-            className="back"
-            onClick={() => {
-              if (state.status === 'playing') setAsking(true);
-              else newDeal();
-            }}
-          >
-            New game
-          </button>
-        </div>
-      </main>
+          <div className="mj-actions">
+            <button
+              type="button"
+              className="back"
+              disabled={state.history.length === 0}
+              onClick={own(() => onChange(undo))}
+            >
+              Return
+            </button>
+            <button
+              type="button"
+              className="back"
+              onClick={own(() => {
+                if (hasMovesToLose(state)) setAsking(true);
+                else newDeal();
+              })}
+            >
+              New game
+            </button>
+          </div>
+        </main>
+      </div>
 
       {asking && (
         <ConfirmDialog

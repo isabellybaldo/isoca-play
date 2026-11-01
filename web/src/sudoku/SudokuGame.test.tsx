@@ -74,6 +74,14 @@ describe('level choice', () => {
     expect(onBack).toHaveBeenCalledOnce();
   });
 
+  test('each level says only how many numbers are given', async () => {
+    render(<Holder onBack={vi.fn()} />);
+    const line = (level: string) => screen.getByRole('button', { name: level }).querySelector('.sd-levelline')!.textContent;
+    expect(line('Easy')).toBe('Most numbers given.');
+    expect(line('Medium')).toBe('Fewer numbers given.');
+    expect(line('Hard')).toBe('Fewest numbers given.');
+  });
+
   test('a level opens a 9 by 9 board of a puzzle of that level', async () => {
     await start('Hard');
     expect(cells()).toHaveLength(81);
@@ -205,6 +213,19 @@ describe('the end', () => {
     expect(note()).toBe('You won.');
   });
 
+  test('return reopens a won board, which then takes digits again', async () => {
+    const { user } = await start();
+    await fill(user, FIRST_BLANKS, (c) => SOLUTION[c]);
+    expect(note()).toBe('You won.');
+    const back = screen.getByRole('button', { name: 'Return' }) as HTMLButtonElement;
+    expect(back.disabled).toBe(false);
+    await user.click(back);
+    expect(note()).toBe('');
+    expect(cells()[2].getAttribute('aria-label')).toMatch(/empty/);
+    await writeIn(user, 2, wrongDigit(2));
+    expect(note()).toBe('Not solved.');
+  });
+
   test('a won board takes no more digits', async () => {
     const { user } = await start();
     await fill(user, FIRST_BLANKS, (c) => SOLUTION[c]);
@@ -259,6 +280,19 @@ describe('new game', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(cells()[40].getAttribute('aria-label')).toMatch(/empty/);
     expect(note()).toBe('');
+  });
+
+  test('does not ask before the first move, or once every move is taken back', async () => {
+    const { user } = await start();
+    await user.click(cells()[0]); // only a selection, not a move
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(cells()[0].getAttribute('aria-label')).toMatch(/given/); // the other puzzle
+
+    await writeIn(user, 40, 1);
+    await user.click(screen.getByRole('button', { name: 'Return' }));
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
   test('a level with one puzzle deals that one again', async () => {
