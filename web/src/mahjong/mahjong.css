@@ -87,6 +87,9 @@
 .mj-bar { display: flex; align-items: center; justify-content: space-between; padding-right: 3px; }
 .mj-moves { font-family: var(--big); font-size: 24px; line-height: 1; }
 
+.mj-options { display: flex; align-items: center; gap: 12px; }
+.mj-slots-switch { flex: none; }
+
 .mj-slots { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mj-slots-name { font-family: var(--big); font-size: 22px; line-height: 1; color: var(--dim); }
 .mj-slot-row { display: flex; gap: 6px; list-style: none; }

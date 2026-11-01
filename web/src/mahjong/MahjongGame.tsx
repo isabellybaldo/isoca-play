@@ -108,7 +108,9 @@ function EndNote({ state }: { state: MahjongState }) {
       <p className="mj-end-line">
         {won
           ? `Board cleared in ${state.history.length} moves.`
-          : 'All 4 slots filled with no pair. Return takes the last move back.'}
+          : state.noSlots
+            ? 'No open pair left. Return takes the last move back.'
+            : 'All 4 slots filled with no pair. Return takes the last move back.'}
       </p>
     </div>
   );
@@ -143,7 +145,7 @@ export default function MahjongGame({
     setProblem('');
     try {
       const deal = await newMahjong(layout.id);
-      const next = newGame(deal.tiles);
+      const next = newGame(deal.tiles, { noSlots: state.noSlots });
       onChange(() => next);
     } catch (error) {
       setProblem(newGameProblem(error));
@@ -152,7 +154,7 @@ export default function MahjongGame({
     }
   };
   const note = startNote({ online, starting, problem });
-  const width = tileWidth(layout, viewport.width, viewport.height);
+  const width = tileWidth(layout, viewport.width, viewport.height, { noSlots: state.noSlots });
   const box = boardBox(layout, width);
   // Lower layers first, and each row left to right, so upper tiles lie on top.
   const tiles = state.tiles
@@ -169,20 +171,22 @@ export default function MahjongGame({
             <span className="mj-moves">Moves: {state.history.length}</span>
           </div>
 
-          <div className="mj-slots">
-            <span className="mj-slots-name" id="mj-slots-name">Slots</span>
-            <ol className="mj-slot-row" aria-labelledby="mj-slots-name">
-              {Array.from({ length: SLOT_COUNT }, (_, i) => (
-                <li key={i} className="mj-slot">
-                  {held[i] ? (
-                    <span className="tile"><TileArt face={held[i].face} /></span>
-                  ) : (
-                    <span className="mj-sr">Empty</span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </div>
+          {!state.noSlots && (
+            <div className="mj-slots">
+              <span className="mj-slots-name" id="mj-slots-name">Slots</span>
+              <ol className="mj-slot-row" aria-labelledby="mj-slots-name">
+                {Array.from({ length: SLOT_COUNT }, (_, i) => (
+                  <li key={i} className="mj-slot">
+                    {held[i] ? (
+                      <span className="tile"><TileArt face={held[i].face} /></span>
+                    ) : (
+                      <span className="mj-sr">Empty</span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
 
           <div
             className="mj-board"

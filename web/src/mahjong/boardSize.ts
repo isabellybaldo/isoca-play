@@ -9,6 +9,8 @@ const LARGE = 54;
 // Everything above and below the board on the game screen, in px: 12 of padding each
 // end, the 44 px bar, the 54 px slots, the 44 px buttons and the three 8 px gaps.
 export const GAME_CHROME = 12 + 44 + 8 + 54 + 8 + 8 + 44 + 12;
+// Without the slots row, its 54 px and one of the gaps are gone.
+const SLOTS_ROW = 54 + 8;
 
 export function tileHeight(width: number): number {
   return (width * 23) / 18;
@@ -41,9 +43,15 @@ export function boardBox(layout: Layout, width: number): { width: number; height
 
 // 54 px only when the whole board and the rows around it fit the viewport. Otherwise
 // 36 px, the smallest size: a board at most 8 tiles wide and 9 rows tall fits 320 x 568.
-export function tileWidth(layout: Layout, viewportWidth: number, viewportHeight: number): number {
+export function tileWidth(
+  layout: Layout,
+  viewportWidth: number,
+  viewportHeight: number,
+  options?: { noSlots?: boolean },
+): number {
   const box = boardBox(layout, LARGE);
-  const fits = box.width <= viewportWidth - SIDE_PADDING * 2 && box.height + GAME_CHROME <= viewportHeight;
+  const chrome = options?.noSlots ? GAME_CHROME - SLOTS_ROW : GAME_CHROME;
+  const fits = box.width <= viewportWidth - SIDE_PADDING * 2 && box.height + chrome <= viewportHeight;
   return fits ? LARGE : SMALL;
 }
 

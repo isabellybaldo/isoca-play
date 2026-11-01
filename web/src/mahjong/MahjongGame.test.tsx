@@ -37,11 +37,11 @@ function tile(id: number, face: string, x: number, y = 0, z = 0): Tile {
 const apart = (faces: string[]): Tile[] => faces.map((face, i) => tile(i, face, i * 4));
 
 // The game itself lives above the screen; this stands in for App.
-function play(tiles: Tile[]) {
+function play(tiles: Tile[], options?: { noSlots?: boolean }) {
   const onBack = vi.fn();
   const held: { state?: MahjongState } = {};
   function Holder() {
-    const [state, setState] = useState(() => newGame(tiles));
+    const [state, setState] = useState(() => newGame(tiles, options));
     held.state = state;
     return <MahjongGame layout={layout} state={state} onChange={setState} onBack={onBack} />;
   }
@@ -528,5 +528,65 @@ describe('leaving and starting over', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
     expect(held.state).toBe(before);
     expect(held.state!.slots).toHaveLength(1);
+  });
+});
+
+describe('without slots', () => {
+  test('the Slots list is gone, and a pair of taps clears two tiles', async () => {
+    const { user, held: game } = play(apart(['star1', 'star1', 'frog']), { noSlots: true });
+    expect(screen.queryByRole('list', { name: 'Slots' })).toBeNull();
+    expect(screen.queryByText('Slots')).toBeNull();
+    const [first, second] = screen.getAllByRole('button', { name: 'Moon tile' });
+    await user.click(first);
+    await user.click(second);
+    expect(game.state!.history).toHaveLength(1);
+    expect(screen.getByText('Moves: 1')).toBeTruthy();
+  });
+
+  test('the lost note says no open pair is left', async () => {
+    const { user } = play(apart(['star1', 'star1', 'frog', 'fish']), { noSlots: true });
+    const [first, second] = screen.getAllByRole('button', { name: 'Moon tile' });
+    await user.click(first);
+    await user.click(second);
+    expect(screen.getByRole('status').textContent).toContain('No open pair left. Return takes the last move back.');
+  });
+
+  test('new game keeps the mode of the game', async () => {
+    const { user, held: game } = play(apart(['star1', 'frog']), { noSlots: true });
+    nextDeal(apart(['heart', 'bunny']));
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    await screen.findByRole('button', { name: 'Heart tile' });
+    expect(game.state!.noSlots).toBe(true);
+    expect(screen.queryByRole('list', { name: 'Slots' })).toBeNull();
+  });
+
+  test('a slots game stays a slots game on new game', async () => {
+    const { user, held: game } = play(apart(['star1', 'frog']));
+    nextDeal(apart(['heart', 'bunny']));
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    await screen.findByRole('button', { name: 'Heart tile' });
+    expect('noSlots' in game.state!).toBe(false);
+    expect(screen.getByRole('list', { name: 'Slots' })).toBeTruthy();
+  });
+});
+
+describe('the Slots switch on setup', () => {
+  test('is pressed by default and reports a flip', async () => {
+    const onSlots = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <MahjongSetup level="easy" onLevel={vi.fn()} onStart={vi.fn()} onBack={vi.fn()} slots onSlots={onSlots} />,
+    );
+    const sw = screen.getByRole('button', { name: 'Slots' });
+    expect(sw.getAttribute('aria-pressed')).toBe('true');
+    await user.click(sw);
+    expect(onSlots).toHaveBeenCalledWith(false);
+  });
+
+  test('stays usable while a start is disabled', () => {
+    render(
+      <MahjongSetup level="easy" onLevel={vi.fn()} onStart={vi.fn()} onBack={vi.fn()} slots onSlots={vi.fn()} disabled />,
+    );
+    expect((screen.getByRole('button', { name: 'Slots' }) as HTMLButtonElement).disabled).toBe(false);
   });
 });

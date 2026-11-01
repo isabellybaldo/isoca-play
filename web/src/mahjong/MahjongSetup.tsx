@@ -40,6 +40,8 @@ export default function MahjongSetup({
   disabled = false,
   note = '',
   resume,
+  slots = true,
+  onSlots = () => {},
 }: {
   level: Level;
   onLevel: (level: Level) => void;
@@ -49,6 +51,8 @@ export default function MahjongSetup({
   disabled?: boolean;
   note?: string;
   resume?: ReactNode;
+  slots?: boolean;
+  onSlots?: (slots: boolean) => void;
 }) {
   const types = layoutsFor(level);
   const current = LEVELS.find((l) => l.id === level)!;
@@ -71,6 +75,13 @@ export default function MahjongSetup({
             {l.name}
           </button>
         ))}
+      </div>
+
+      <div className="mj-options">
+        <button type="button" className="mj-level mj-slots-switch" aria-pressed={slots} onClick={() => onSlots(!slots)}>
+          Slots
+        </button>
+        <span className="mj-line">{slots ? 'On: 4 slots hold the tiles.' : 'Off: tap two matching tiles.'}</span>
       </div>
 
       <div className="mj-types-head">
