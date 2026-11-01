@@ -16,9 +16,13 @@ permissions:
   contents: read
 
 # Deploys and rollbacks share one group, so one at a time touches the box. Publishes have
-# their own, which keeps deploys in commit order: a run reaches deploy only after its
-# publish. Neither is a queue: GitHub holds one waiting job per group and a newer one
-# replaces it, so a waiting job can be cancelled, and that includes a waiting rollback.
+# their own. Neither is a queue: GitHub holds one waiting job per group and the last to
+# arrive replaces it, so a waiting job can be cancelled, and that includes a waiting rollback.
+# These groups do not keep commit order: a run's checks can finish after a newer run's. What
+# keeps it is the deploy job's first step, which runs holding the group and goes on only if
+# its commit is still the head of main, so an older commit never deploys over a newer one.
+# If the job an older one replaced was the head's, nothing deploys until the head's run is
+# re-run; it shows as cancelled.
 env:
   IMAGE: ghcr.io/isabellybaldo/isoca-play
   SITE_URL: https://play.isoca.space
@@ -72,7 +76,21 @@ jobs:
     timeout-minutes: 15
     concurrency: deploy-play
     steps:
+      - name: Go on only if this commit is still the head of main
+        id: head
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq .object.sha)
+          [[ "$head" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::could not read the head of main"; exit 1; }
+          if [ "$head" = "$GITHUB_SHA" ]; then
+            echo "current=true" >>"$GITHUB_OUTPUT"
+          else
+            echo "::notice::$GITHUB_SHA is no longer the head of main ($head), so it is not deployed."
+          fi
+
       - name: Check the secrets and write the SSH files
+        if: steps.head.outputs.current == 'true'
         env:
           DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -95,6 +113,7 @@ jobs:
           chmod 600 "$RUNNER_TEMP/ssh/key"
 
       - name: Release on the box
+        if: steps.head.outputs.current == 'true'
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
@@ -110,6 +129,7 @@ jobs:
           grep -qxF "released play $DIGEST" <<<"$out" || { echo "::error::the box did not report released play $DIGEST"; exit 1; }
 
       - name: Smoke check
+        if: steps.head.outputs.current == 'true'
         run: |
           deadline=$((SECONDS + 120))
           while :; do
