@@ -4,6 +4,7 @@ import pytest
 from fastapi import Depends
 from fastapi.testclient import TestClient
 
+from conftest import BASE_URL
 from isoca_play.app import create_app, get_db
 
 
@@ -18,12 +19,13 @@ def test_settings_now_is_injectable(settings, clock):
     assert settings.now() == 1_000_060.0
 
 
-def test_api_docs_are_not_exposed(client):
+def test_api_docs_are_not_exposed(client, sign_in):
+    sign_in(client)
     for path in ("/docs", "/redoc", "/openapi.json"):
         assert client.get(path).status_code == 404
 
 
-def test_get_db_gives_a_connection_per_request_and_closes_it(settings):
+def test_get_db_gives_a_connection_per_request_and_closes_it(settings, sign_in):
     app = create_app(settings)
     seen = []
 
@@ -32,7 +34,8 @@ def test_get_db_gives_a_connection_per_request_and_closes_it(settings):
         seen.append(conn)
         return {"n": conn.execute("SELECT COUNT(*) FROM save").fetchone()[0]}
 
-    c = TestClient(app)
+    c = TestClient(app, base_url=BASE_URL)
+    sign_in(c)
     assert c.get("/probe").json() == {"n": 0}
     assert c.get("/probe").json() == {"n": 0}
     assert seen[0] is not seen[1]

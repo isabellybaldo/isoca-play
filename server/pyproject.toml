@@ -15,6 +15,9 @@ isoca-play = "isoca_play.cli:main"
 [tool.setuptools]
 packages = ["isoca_play"]
 
+[tool.setuptools.package-data]
+isoca_play = ["public/*", "public/fonts/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

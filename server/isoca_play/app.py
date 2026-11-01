@@ -7,7 +7,7 @@ from typing import Iterator
 
 from fastapi import Depends, FastAPI, Request
 
-from . import db
+from . import auth, db
 from .config import Settings
 
 
@@ -28,6 +28,7 @@ def create_app(settings: Settings) -> FastAPI:
     # Private site: no public API docs or schema.
     app = FastAPI(docs_url=None, redoc_url=None, openapi_url=None)
     app.state.settings = settings
+    auth.install(app)
 
     @app.get("/healthz")
     def healthz() -> dict:
