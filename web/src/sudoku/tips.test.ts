@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest';
 import rawCases from '../../../shared/tip-cases.json';
-import { fullChain, type Candidate, type TipStep } from './tips';
+import { fullChain, tipChain, type Candidate, type TipStep } from './tips';
 
 type TipCase = { givens: string; solution: string; tips: string };
 
@@ -90,9 +90,9 @@ describe('against the grader, on the whole pack', () => {
   });
 });
 
-// One board per technique, from the pack, where it is the first thing to fire. The answers
-// were read off the grader's candidates at that point.
-const WORKED: { name: string; board: string; step: TipStep }[] = [
+// One board per technique, from the pack, where it is the first thing to fire unless `at` says
+// otherwise. The answers were read off the grader's candidates at that point.
+const WORKED: { name: string; board: string; at?: number; step: TipStep }[] = [
   {
     name: 'Naked Single',
     board: '.....42.8.1.....5..7.1..34..827.963.6..423.813.1..8.7.7....1.93...5.682.92...7.6.',
@@ -202,6 +202,18 @@ const WORKED: { name: string; board: string; step: TipStep }[] = [
     },
   },
   {
+    name: 'X-Wing on columns',
+    board: '1.695....2.416.95.75923..1...58731....3516....17429.35578.42.91.41.95728..27815..',
+    at: 3,
+    step: {
+      technique: 'X-Wing',
+      cells: [28, 73, 34, 79],
+      removes: each([27, 35, 72, 80], [6]),
+      relies: each([1, 10, 37, 7, 43], [6]),
+      because: "X-Wing: in columns 2 and 8, 6 only fits in rows 4 and 9, so the rest of those rows can't be 6.",
+    },
+  },
+  {
     name: 'XY-Wing',
     board: '9..1......2.967..36..4..9..418596732736241589592378.1.26.839.75357614298..97253..',
     step: {
@@ -224,11 +236,23 @@ const WORKED: { name: string; board: string; step: TipStep }[] = [
       because: "Swordfish: in rows 2, 5 and 9, 3 only fits in columns 3, 4 and 6, so the rest of those columns can't be 3.",
     },
   },
+  {
+    // Row 2 has two more empty squares. Column 6's is on a crossing line, so it isn't relied on.
+    name: 'Swordfish with other empty squares on its rows',
+    board: '741658.2..6..9.147239417856.9718.4323..924.71124.7..8.4..761.9.91.83.764.7..49.1.',
+    step: {
+      technique: 'Swordfish',
+      cells: [9, 11, 27, 32, 65, 68],
+      removes: each([38, 50, 56, 72, 74], [5]),
+      relies: each([12], [5]),
+      because: "Swordfish: in rows 2, 4 and 8, 5 only fits in columns 1, 3 and 6, so the rest of those columns can't be 5.",
+    },
+  },
 ];
 
-describe.each(WORKED)('$name', ({ board, step }) => {
-  test('is the first step, as worked out by hand', () => {
-    const got = fullChain(written(board))[0];
+describe.each(WORKED)('$name', ({ board, at, step }) => {
+  test('is the step, as worked out by hand', () => {
+    const got = fullChain(written(board))[at ?? 0];
     expect(got.technique).toBe(step.technique);
     expect(got.cells).toEqual(step.cells);
     expect(got.unit).toEqual(step.unit);
@@ -241,4 +265,172 @@ describe.each(WORKED)('$name', ({ board, step }) => {
 
 test('a full board has no tip', () => {
   expect(fullChain(written(cases[0].solution))).toEqual([]);
+});
+
+// Worked out here apart from the engine, like freshCandidates: why a kept step still holds
+// when only the kept steps have run.
+const rowOf = (i: number) => Math.floor(i / 9);
+const colOf = (i: number) => i % 9;
+const boxOf = (i: number) => Math.floor(rowOf(i) / 3) * 3 + Math.floor(colOf(i) / 3);
+const sees = (a: number, b: number) => a !== b && (rowOf(a) === rowOf(b) || colOf(a) === colOf(b) || boxOf(a) === boxOf(b));
+const ALL_CELLS = Array.from({ length: 81 }, (_, i) => i);
+const ALL_DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+const unitCells = ({ kind, index }: NonNullable<TipStep['unit']>) =>
+  ALL_CELLS.filter((i) => (kind === 'row' ? rowOf(i) : kind === 'column' ? colOf(i) : boxOf(i)) === index);
+const spots = (left: Set<number>[], cells: number[], digit: number) => cells.filter((i) => left[i].has(digit));
+const within = (some: number[], all: number[]) => some.every((x) => all.includes(x));
+
+function fishHolds(left: Set<number>[], cells: number[], digit: number, gone: number[], base: (i: number) => number, cross: (i: number) => number) {
+  const bases = [...new Set(cells.map(base))];
+  const crosses = [...new Set(cells.map(cross))];
+  return (
+    bases.length === crosses.length &&
+    bases.every((b) => {
+      const places = spots(left, ALL_CELLS.filter((i) => base(i) === b), digit);
+      return places.length > 0 && within(places.map(cross), crosses);
+    }) &&
+    gone.every((i) => crosses.includes(cross(i)) && !bases.includes(base(i)))
+  );
+}
+
+function holds(step: TipStep, left: Set<number>[]): boolean {
+  const { technique, cells, unit, removes, places } = step;
+  const gone = removes.map((r) => r.cell);
+  const digit = removes[0]?.digit;
+  const oneDigit = removes.every((r) => r.digit === digit);
+  switch (technique) {
+    case 'Naked Single':
+      return left[places!.cell].size === 1 && left[places!.cell].has(places!.digit);
+    case 'Hidden Single': {
+      const only = spots(left, unitCells(unit!), places!.digit);
+      return only.length === 1 && only[0] === places!.cell;
+    }
+    case 'Locked Candidates': {
+      const inUnit = spots(left, unitCells(unit!), digit);
+      return oneDigit && inUnit.length > 0 && within(inUnit, cells) && gone.every((i) => !inUnit.includes(i) && inUnit.every((c) => sees(i, c)));
+    }
+    case 'Naked Pair':
+    case 'Naked Triple': {
+      const inUnit = unitCells(unit!);
+      const held = new Set(cells.flatMap((i) => [...left[i]]));
+      return (
+        within(cells, inUnit) &&
+        held.size === cells.length &&
+        removes.every((r) => held.has(r.digit) && inUnit.includes(r.cell) && !cells.includes(r.cell))
+      );
+    }
+    case 'Hidden Pair':
+    case 'Hidden Triple': {
+      const inUnit = unitCells(unit!);
+      const locked = ALL_DIGITS.filter((d) => {
+        const at = spots(left, inUnit, d);
+        return at.length > 0 && within(at, cells);
+      });
+      return within(cells, inUnit) && locked.length >= cells.length && removes.every((r) => cells.includes(r.cell) && !locked.includes(r.digit));
+    }
+    case 'X-Wing':
+    case 'Swordfish':
+      return oneDigit && (fishHolds(left, cells, digit, gone, rowOf, colOf) || fishHolds(left, cells, digit, gone, colOf, rowOf));
+    case 'XY-Wing': {
+      const [pivot, a, c] = cells;
+      if ([pivot, a, c].some((i) => left[i].size !== 2) || !sees(pivot, a) || !sees(pivot, c)) return false;
+      const shared = [...left[a]].filter((d) => left[c].has(d));
+      if (shared.length !== 1 || left[pivot].has(shared[0])) return false;
+      const x = [...left[a]].find((d) => d !== shared[0])!;
+      const y = [...left[c]].find((d) => d !== shared[0])!;
+      return (
+        x !== y &&
+        left[pivot].has(x) &&
+        left[pivot].has(y) &&
+        oneDigit &&
+        digit === shared[0] &&
+        gone.every((i) => sees(i, a) && sees(i, c) && i !== pivot)
+      );
+    }
+    default:
+      throw new Error(`no proof written for ${technique}`);
+  }
+}
+
+const has = (list: Candidate[], { cell, digit }: Candidate) => list.some((r) => r.cell === cell && r.digit === digit);
+
+describe('tipChain, on the whole pack', () => {
+  test('keeps only the steps its number needs, and those are enough', { timeout: 300_000 }, () => {
+    let tipCount = 0;
+    let oneStep = 0;
+    let oneStepBefore = 0;
+    let longest = 0;
+    let longestBefore = 0;
+    for (const { givens, tips } of cases) {
+      const values = written(givens);
+      for (const tip of tips.split(',')) {
+        const full = fullChain(values);
+        const kept = tipChain(values);
+        const name = `${values.join('')} tip ${tip}`;
+
+        tipCount += 1;
+        if (kept.length === 1) oneStep += 1;
+        if (full.length === 1) oneStepBefore += 1;
+        longest = Math.max(longest, kept.length);
+        longestBefore = Math.max(longestBefore, full.length);
+
+        expect(kept[kept.length - 1].places, name).toEqual(full[full.length - 1].places);
+        if (full.length === 1) expect(kept, name).toEqual(full);
+
+        // A subsequence of the full chain, each step as it was but for removes it doesn't need.
+        let from = 0;
+        for (const step of kept) {
+          const found = full.findIndex(
+            (other, n) =>
+              n >= from &&
+              other.technique === step.technique &&
+              other.because === step.because &&
+              JSON.stringify(other.cells) === JSON.stringify(step.cells) &&
+              JSON.stringify(other.relies) === JSON.stringify(step.relies) &&
+              step.removes.every((r) => has(other.removes, r)),
+          );
+          expect(found, `${name}: ${step.technique} out of order`).toBeGreaterThanOrEqual(0);
+          from = found + 1;
+        }
+
+        // Replayed from the written digits alone, with only what was kept.
+        const left = freshCandidates(values);
+        kept.forEach((step, n) => {
+          for (const { cell, digit } of step.relies) {
+            expect(left[cell].has(digit), `${name}: ${step.technique} relies on ${digit} gone from ${cell}`).toBe(false);
+          }
+          expect(holds(step, left), `${name}: ${step.technique} ${step.cells} no longer holds`).toBe(true);
+          const later = kept.slice(n + 1).flatMap((other) => other.relies);
+          if (!step.places) expect(step.removes.length, `${name}: ${step.technique} kept for nothing`).toBeGreaterThan(0);
+          for (const removed of step.removes) {
+            expect(left[removed.cell].has(removed.digit), `${name}: ${step.technique} removes ${removed.digit} from ${removed.cell}`).toBe(true);
+            expect(has(later, removed), `${name}: nothing later needs ${removed.digit} gone from ${removed.cell}`).toBe(true);
+            left[removed.cell].delete(removed.digit);
+          }
+        });
+
+        values[Number(tip.slice(-3, -1))] = Number(tip.slice(-1));
+      }
+    }
+    console.log(
+      `tips: ${tipCount}; longest chain ${longestBefore} -> ${longest}; ` +
+        `one-step ${((100 * oneStepBefore) / tipCount).toFixed(1)}% -> ${((100 * oneStep) / tipCount).toFixed(1)}%`,
+    );
+  });
+});
+
+describe('tipChain with nothing to place', () => {
+  test('is empty when the techniques stall, whatever they removed on the way', () => {
+    // Box 1's last column holds only 1, 8 and 9, which clears them from that column; then nothing fires.
+    const stalled = written('23.......45.......67' + '.'.repeat(61));
+    const full = fullChain(stalled);
+    expect(full.length).toBeGreaterThan(0);
+    expect(full.some((step) => step.places)).toBe(false);
+    expect(tipChain(stalled)).toEqual([]);
+  });
+
+  test('is empty on a full board and on a blank one', () => {
+    expect(tipChain(written(cases[0].solution))).toEqual([]);
+    expect(tipChain(written('.'.repeat(81)))).toEqual([]);
+  });
 });

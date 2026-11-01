@@ -240,7 +240,7 @@ function fish(b: Board, size: number, technique: string): TipStep | null {
           technique,
           cells,
           removes,
-          relies: absent(b, baseCells.filter((i) => !cells.includes(i)), bitOf(digit)),
+          relies: absent(b, baseCells.filter((i) => !crosses.includes(crossOf(i))), bitOf(digit)),
           because: `${technique}: in ${base} ${listOf(group.map((n) => n + 1), 'and')}, ${digit} only fits in ${across} ${listOf(crosses.map((c) => c + 1), 'and')}, so the rest of those ${across} can't be ${digit}.`,
         };
       }
@@ -307,4 +307,22 @@ export function fullChain(values: number[]): TipStep[] {
     if (step.places) return steps;
     for (const { cell, digit } of step.removes) board.cand[cell] &= ~bitOf(digit);
   }
+}
+
+// Only the steps the placed digit depends on, walking back from it: a step stays if it removed
+// something a later kept step relies on, and only those removals stay with it. A candidate no
+// step removed was ruled out by written digits, so it needs nothing kept.
+export function tipChain(values: number[]): TipStep[] {
+  const steps = fullChain(values);
+  if (!steps[steps.length - 1]?.places) return [];
+  const key = ({ cell, digit }: Candidate) => cell * 10 + digit;
+  const needed = new Set<number>();
+  const kept: TipStep[] = [];
+  for (const step of [...steps].reverse()) {
+    const removes = step.removes.filter((candidate) => needed.has(key(candidate)));
+    if (!step.places && !removes.length) continue;
+    kept.unshift({ ...step, removes });
+    for (const candidate of step.relies) needed.add(key(candidate));
+  }
+  return kept;
 }
