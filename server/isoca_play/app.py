@@ -6,9 +6,18 @@ import sqlite3
 from typing import Iterator
 
 from fastapi import Depends, FastAPI, Request
+from fastapi.staticfiles import StaticFiles
 
 from . import auth, db, mahjong, saves, sudoku
 from .config import Settings
+
+
+class _Build(StaticFiles):
+    """The built frontend. A missing build is a 404 for its paths, so the health check
+    and login still answer, where StaticFiles would raise on every request."""
+
+    async def check_config(self) -> None:
+        pass
 
 
 def get_settings(request: Request) -> Settings:
@@ -36,5 +45,10 @@ def create_app(settings: Settings) -> FastAPI:
     @app.get("/healthz")
     def healthz() -> dict:
         return {"version": settings.version}
+
+    # Last, so every route above answers first; the guard stands in front of all of it.
+    # StaticFiles resolves each path and refuses what lands outside static_dir, and it
+    # follows no symlink out. html=True is what serves index.html at /.
+    app.mount("/", _Build(directory=settings.static_dir, html=True, check_dir=False))
 
     return app

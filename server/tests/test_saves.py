@@ -87,9 +87,15 @@ def test_invalid_json_or_a_non_object_is_refused_with_400(client_logged_in, raw)
 
 
 def test_unknown_game_is_404(client_logged_in):
-    for game in ["chess", "Mahjong", "mahjong.json", "..", "%2e%2e", "sudoku%2fx"]:
+    for game in ["chess", "Mahjong", "mahjong.json", "%2e%2e"]:
         assert client_logged_in.get(f"/api/save/{game}").status_code == 404
         assert put(client_logged_in, game, json={}).status_code == 404
+    # These two are not this route: one resolves to /api/, one to /api/save/sudoku/x. They
+    # land on the static mount, which holds nothing there and takes no PUT.
+    for game in ["..", "sudoku%2fx"]:
+        assert client_logged_in.get(f"/api/save/{game}").status_code == 404
+        assert put(client_logged_in, game, json={}).status_code == 405
+    assert client_logged_in.get("/api/save/sudoku").status_code == 204
 
 
 def test_foreign_origin_put_is_refused(client_logged_in, settings):

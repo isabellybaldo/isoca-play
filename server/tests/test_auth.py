@@ -90,7 +90,8 @@ def test_only_the_named_paths_are_public(client):
 
 
 def test_a_dotted_path_does_not_slip_through_a_public_prefix(client):
-    # Sent raw: a static mount behind the guard would normalise this into the app.
+    # Sent raw: the static mount behind the guard would normalise this into the app.
+    # test_static.py holds the same for /assets/ and its encodings, with a real build.
     for raw in [b"/fonts/../assets/x.js", b"/fonts/..%2fassets/x.js"]:
         url = httpx.URL(BASE_URL).copy_with(raw_path=raw)
         r = client.get(url, follow_redirects=False)

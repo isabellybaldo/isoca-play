@@ -34,6 +34,9 @@ def test_get_db_gives_a_connection_per_request_and_closes_it(settings, sign_in):
         seen.append(conn)
         return {"n": conn.execute("SELECT COUNT(*) FROM save").fetchone()[0]}
 
+    # Routes answer in order, and the static mount at / is last and takes everything.
+    app.router.routes.insert(0, app.router.routes.pop())
+
     c = TestClient(app, base_url=BASE_URL)
     sign_in(c)
     assert c.get("/probe").json() == {"n": 0}

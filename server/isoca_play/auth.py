@@ -2,7 +2,7 @@
 
 Without a session, every path answers the login page, or 401 under /api. Only
 PUBLIC_PATHS are reachable. The guard is ASGI middleware, so nothing behind it
-(routes, a later static mount) can be reached by accident.
+(routes, the static mount) can be reached by accident.
 
 Login attempts are processed one at a time behind a small queue. That is what
 keeps Argon2's 64 MiB from adding up against the container's 256 MB cap, and it
