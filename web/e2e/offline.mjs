@@ -608,6 +608,49 @@ try {
   });
   await oldPage.close();
 
+  console.log('-- a log out left unconfirmed');
+  const UNCONFIRMED = 'Log out could not be confirmed, you are still signed in.';
+  // The answer held past the 3 s patience, then lost as a 500. `reach` says whether the
+  // server takes the log out first. Its real answer never gets to the page.
+  const logoutLost = async (reach) => {
+    const lost = new Promise((resolve, reject) => {
+      context
+        .route('**/logout', async (route) => {
+          if (reach) await route.fetch({ maxRedirects: 0 });
+          await new Promise((r) => setTimeout(r, 3300));
+          await route.fulfill({ status: 500 });
+          resolve();
+        })
+        .catch(reject);
+    });
+    await button(page, 'Log out').click();
+    await lost;
+    await context.unroute('**/logout');
+  };
+  await page.goto('/');
+  await home();
+  await waitWorker();
+  await check('a failed log out past the patience lands in the app, signed in, and says so once', async () => {
+    await logoutLost(false);
+    await page.getByText(UNCONFIRMED).waitFor({ timeout: 15000 });
+    same(new URL(page.url()).pathname, '/', 'path');
+    await reload();
+    await home();
+    same(await page.getByText(UNCONFIRMED).count(), 0, 'the message after a reload');
+    await waitWorker();
+  });
+  await check('a log out the server took but never confirmed: login, and no false message after it', async () => {
+    await logoutLost(true);
+    await page.getByLabel('password').waitFor({ timeout: 15000 });
+    await page.getByLabel('password').fill(PASSWORD);
+    await page.getByRole('button', { name: 'Log in' }).click();
+    await home();
+    await page.waitForFunction(() => sessionStorage.getItem('isoca-play-logout-unconfirmed') === null);
+    same(new URL(page.url()).hash, '', 'the mark in the address');
+    await waitWorker();
+    same(await page.getByText(UNCONFIRMED).count(), 0, 'the message');
+  });
+
   console.log('-- log out');
   const gameCode = [releaseA, releaseB].flatMap((release) =>
     readdirSync(join(release, 'assets')).map((f) => `/assets/${f}`),

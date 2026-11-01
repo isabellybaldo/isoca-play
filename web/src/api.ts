@@ -75,6 +75,43 @@ export function goToLogin(): void {
   window.location.assign('/login');
 }
 
+// A log out past its patience leaves this page not knowing how it ended, and the page that
+// could say so comes after a redirect. Session storage is enough to carry that: this tab,
+// no further. Losing it, or having none, only loses the message.
+const LOGOUT_UNCONFIRMED = 'isoca-play-logout-unconfirmed';
+const LOGGED_IN_MARK = '#logged-in'; // on the server's redirect after a login
+
+export function markLogoutUnconfirmed(): void {
+  try {
+    sessionStorage.setItem(LOGOUT_UNCONFIRMED, '1');
+  } catch {
+    // Only the message is lost.
+  }
+}
+
+export function forgetLogoutUnconfirmed(): void {
+  try {
+    sessionStorage.removeItem(LOGOUT_UNCONFIRMED);
+  } catch {
+    // Nothing was kept, then.
+  }
+}
+
+export function logoutUnconfirmed(): boolean {
+  try {
+    return sessionStorage.getItem(LOGOUT_UNCONFIRMED) !== null;
+  } catch {
+    return false;
+  }
+}
+
+// A page that has just logged in: whatever an earlier log out did, this session is new.
+export function takeLoggedInMark(): void {
+  if (window.location.hash !== LOGGED_IN_MARK) return;
+  forgetLogoutUnconfirmed();
+  window.history.replaceState(null, '', window.location.pathname + window.location.search);
+}
+
 export const REPLACE_UNPLAYABLE = 'The saved game could not be opened. A new game replaces it.';
 
 // The one line under the start buttons, saying why they can't be used or what is going on.

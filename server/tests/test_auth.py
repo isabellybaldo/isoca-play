@@ -120,7 +120,7 @@ def test_a_websocket_is_refused_session_or_not(client, sign_in):
 
 def test_right_password_sets_the_cookie(client, password_set):
     r = post_login(client)
-    assert r.status_code == 303 and r.headers["location"] == "/"
+    assert r.status_code == 303 and r.headers["location"] == "/#logged-in"
     [cookie] = set_cookies(r)
     parts = [p.strip() for p in cookie.split(";")]
     assert parts[0].startswith(f"{COOKIE}=")

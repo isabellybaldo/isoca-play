@@ -34,12 +34,14 @@ export default function Home({
   onOpen,
   onLogOut,
   logOutDisabled,
+  leaving,
   note,
   inert,
 }: {
   onOpen: (screen: Screen) => void;
   onLogOut: () => void;
   logOutDisabled: boolean;
+  leaving: boolean;
   note: string;
   inert?: boolean;
 }) {
@@ -47,19 +49,19 @@ export default function Home({
     <main className="shell" inert={inert}>
       <h1 className="home-title">isoca play</h1>
       <div className="games">
-        <button type="button" className="game" onClick={() => onOpen('mahjong')}>
+        <button type="button" className="game" disabled={leaving} onClick={() => onOpen('mahjong')}>
           <MahjongArt />
           <span className="game-name">Mahjong</span>
           <span className="game-line">Match the pairs and clear the board.</span>
         </button>
-        <button type="button" className="game sudoku" onClick={() => onOpen('sudoku')}>
+        <button type="button" className="game sudoku" disabled={leaving} onClick={() => onOpen('sudoku')}>
           <SudokuArt />
           <span className="game-name">Sudoku</span>
           <span className="game-line">Fill the grid, one to nine.</span>
         </button>
       </div>
       <div className="home-foot">
-        <button type="button" className="back" disabled={logOutDisabled} onClick={onLogOut}>Log out</button>
+        <button type="button" className="back" disabled={logOutDisabled || leaving} onClick={onLogOut}>Log out</button>
         {note && <p className="start-note" aria-live="polite">{note}</p>}
       </div>
     </main>

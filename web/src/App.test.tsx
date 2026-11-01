@@ -1,5 +1,7 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { goToLogin } from './api';
 import App from './App';
@@ -20,6 +22,7 @@ let server: ReturnType<typeof fakeServer>;
 beforeEach(() => {
   server = fakeServer();
   vi.mocked(goToLogin).mockClear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -549,6 +552,190 @@ describe('the server', () => {
     });
     expect(goToLogin).toHaveBeenCalledOnce();
   }, 10_000);
+
+  describe('a log out whose outcome was not confirmed', () => {
+    const NOTE = 'Log out could not be confirmed, you are still signed in.';
+    const FLAG = 'isoca-play-logout-unconfirmed';
+    const past3s = () =>
+      act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 3200));
+      });
+    // Past goToLogin the real browser loads the app again if the session is still alive.
+    const bootAgain = async () => {
+      cleanup();
+      server.gate = null;
+      server.answer = null;
+      await open();
+    };
+
+    test('a 5xx after 3 seconds says so on the next boot, once', async () => {
+      const user = userEvent.setup();
+      await open();
+      let answer = () => {};
+      server.gate = new Promise<void>((resolve) => (answer = resolve));
+      server.answer = ({ path }) => (path === '/logout' ? 500 : undefined);
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await past3s();
+      answer();
+      await settle();
+      await settle();
+      expect(goToLogin).toHaveBeenCalledOnce();
+      expect(screen.queryByText(NOTE)).toBeNull();
+
+      await bootAgain();
+      expect(screen.getByText(NOTE)).toBeTruthy();
+
+      await bootAgain();
+      expect(screen.queryByText(NOTE)).toBeNull();
+    }, 10_000);
+
+    test('no answer at all says so too, even if the page goes before the request ends', async () => {
+      const user = userEvent.setup();
+      await open();
+      server.gate = new Promise<void>(() => {});
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await past3s();
+      await bootAgain();
+      expect(screen.getByText(NOTE)).toBeTruthy();
+    }, 10_000);
+
+    test('a slow log out the server confirmed says nothing', async () => {
+      const user = userEvent.setup();
+      await open();
+      let answer = () => {};
+      server.gate = new Promise<void>((resolve) => (answer = resolve));
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await past3s();
+      answer();
+      await settle();
+      await settle();
+      expect(goToLogin).toHaveBeenCalledOnce();
+      expect(sessionStorage.getItem(FLAG)).toBeNull();
+      await bootAgain();
+      expect(screen.queryByText(NOTE)).toBeNull();
+    }, 10_000);
+
+    test('a quick refusal keeps its own note, and leaves nothing for the next boot', async () => {
+      const user = userEvent.setup();
+      await open();
+      server.answer = ({ path }) => (path === '/logout' ? 503 : undefined);
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await settle();
+      expect(screen.getByText('That did not work. Try again.')).toBeTruthy();
+      await bootAgain();
+      expect(screen.queryByText(NOTE)).toBeNull();
+    });
+
+    test('a fresh login is not told it failed to log out, and its mark leaves the address', async () => {
+      sessionStorage.setItem(FLAG, '1');
+      window.history.replaceState(null, '', '/#logged-in');
+      await open();
+      expect(screen.queryByText(NOTE)).toBeNull();
+      expect(sessionStorage.getItem(FLAG)).toBeNull();
+      expect(window.location.hash).toBe('');
+    });
+
+    test('the server marks a login with what the page looks for', () => {
+      const auth = readFileSync(join(import.meta.dirname, '..', '..', 'server', 'isoca_play', 'auth.py'), 'utf8');
+      expect(auth).toContain('RedirectResponse("/#logged-in", 303');
+    });
+
+    test('a boot that finds the session gone says nothing, and forgets', async () => {
+      sessionStorage.setItem(FLAG, '1');
+      server.answer = ({ path }) => (path.startsWith('/api/save/') ? 401 : undefined);
+      await open();
+      expect(screen.queryByText(NOTE)).toBeNull();
+      expect(sessionStorage.getItem(FLAG)).toBeNull();
+    });
+
+    test('a boot answered only from the device does not claim a session, and keeps the flag for later', async () => {
+      sessionStorage.setItem(FLAG, '1');
+      server.worker = { sudoku: null, mahjong: null };
+      await open();
+      expect(screen.queryByText(NOTE)).toBeNull();
+      expect(sessionStorage.getItem(FLAG)).toBe('1');
+
+      cleanup();
+      server.worker = null;
+      await open();
+      expect(screen.getByText(NOTE)).toBeTruthy();
+    });
+
+    test('where the browser refuses session storage, log out still works', async () => {
+      const user = userEvent.setup();
+      vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('denied');
+      });
+      await open();
+      server.gate = new Promise<void>((_resolve, reject) =>
+        setTimeout(() => reject(new DOMException('Aborted', 'AbortError')), 3100),
+      );
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await past3s();
+      await settle();
+      expect(goToLogin).toHaveBeenCalledOnce();
+    }, 10_000);
+  });
+
+  describe('home while a log out runs', () => {
+    const controls = () =>
+      ['Log out', /Mahjong/, /Sudoku/].map((name) => screen.getByRole('button', { name }) as HTMLButtonElement);
+
+    test('every control is disabled, and stays so on the way to login', async () => {
+      const user = userEvent.setup();
+      await open();
+      let answer = () => {};
+      server.gate = new Promise<void>((resolve) => (answer = resolve));
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await settle();
+      expect(controls().map((b) => b.disabled)).toEqual([true, true, true]);
+      answer();
+      await settle();
+      await settle();
+      expect(goToLogin).toHaveBeenCalledOnce();
+      expect(controls().map((b) => b.disabled)).toEqual([true, true, true]);
+    });
+
+    test('a second tap starts no second log out', async () => {
+      const user = userEvent.setup();
+      await open();
+      let answer = () => {};
+      server.gate = new Promise<void>((resolve) => (answer = resolve));
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await settle();
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+      answer();
+      await settle();
+      await settle();
+      expect(server.requests.filter((r) => r.path === '/logout')).toHaveLength(1);
+      expect(screen.getByRole('heading', { name: 'isoca play' })).toBeTruthy();
+    });
+
+    test('a quick refusal hands the controls back', async () => {
+      const user = userEvent.setup();
+      await open();
+      server.answer = ({ path }) => (path === '/logout' ? 503 : undefined);
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await settle();
+      expect(controls().map((b) => b.disabled)).toEqual([false, false, false]);
+    });
+
+    test('the unsaved-moves question hands the controls back behind it, and Stay leaves them live', async () => {
+      const user = userEvent.setup();
+      await open();
+      await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+      server.answer = ({ method }) => (method === 'PUT' ? 413 : undefined);
+      await user.click(screen.getByRole('button', { name: 'Easy' }));
+      await screen.findByRole('group', { name: 'Board' });
+      await settle();
+      await user.click(screen.getByRole('button', { name: 'Back to levels' }));
+      await user.click(screen.getByRole('button', { name: 'Back to home' }));
+      await user.click(screen.getByRole('button', { name: 'Log out' }));
+      await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Stay' }));
+      expect(controls().map((b) => b.disabled)).toEqual([false, false, false]);
+    });
+  });
 
   test('offline the marker shows with nothing waiting', async () => {
     const { container } = await open();

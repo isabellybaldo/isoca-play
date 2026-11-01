@@ -107,6 +107,7 @@ type Screen<G extends GameName> = {
   ready: () => void;
   saving: (status: SaveStatus) => void;
   signedOut: (yes: boolean) => void;
+  signedIn: () => void;
   refused: (yes: boolean) => void;
   unplayable: (yes: boolean) => void;
   checking: (yes: boolean) => void;
@@ -177,6 +178,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     fromCache = false;
     checks = 0;
     clearTimeout(checkTimer);
+    screen.signedIn();
   };
   const askAgainLater = () => {
     clearTimeout(checkTimer);
@@ -402,6 +404,7 @@ export function useSavedGame<G extends GameName>(game: G) {
   const [ready, setReady] = useState(false);
   const [saving, setSaving] = useState<SaveStatus>('saved');
   const [signedOut, setSignedOut] = useState(false);
+  const [signedIn, setSignedIn] = useState(false); // the server itself has answered, since boot
   const [refused, setRefused] = useState(false);
   const [unplayable, setUnplayable] = useState(false);
   const [checking, setChecking] = useState(false);
@@ -412,6 +415,7 @@ export function useSavedGame<G extends GameName>(game: G) {
       ready: () => setReady(true),
       saving: setSaving,
       signedOut: setSignedOut,
+      signedIn: () => setSignedIn(true),
       refused: setRefused,
       unplayable: setUnplayable,
       checking: setChecking,
@@ -427,5 +431,5 @@ export function useSavedGame<G extends GameName>(game: G) {
   const flush = useCallback((limit = FLUSH_LIMIT) => link.flush(limit), [link]);
   const giveUp = useCallback(() => link.giveUp(), [link]);
 
-  return { state, setState, saving, signedOut, refused, unplayable, checking, ready, flush, giveUp };
+  return { state, setState, saving, signedOut, signedIn, refused, unplayable, checking, ready, flush, giveUp };
 }

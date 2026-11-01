@@ -1,5 +1,16 @@
-import { useState } from 'react';
-import { goToLogin, logout, newGameProblem, newMahjong, REPLACE_UNPLAYABLE, startNote } from './api';
+import { useEffect, useState } from 'react';
+import {
+  forgetLogoutUnconfirmed,
+  goToLogin,
+  logout,
+  logoutUnconfirmed,
+  markLogoutUnconfirmed,
+  newGameProblem,
+  newMahjong,
+  REPLACE_UNPLAYABLE,
+  startNote,
+  takeLoggedInMark,
+} from './api';
 import ConfirmDialog from './ConfirmDialog';
 import GameBoundary from './GameBoundary';
 import Home from './Home';
@@ -116,6 +127,7 @@ function Mahjong({
 
 const LOGOUT_OFFLINE = 'Logging out needs a connection.';
 const LOGOUT_FAILED = 'That did not work. Try again.';
+const LOGOUT_UNCONFIRMED = 'Log out could not be confirmed, you are still signed in.';
 const LOGOUT_PATIENCE = 3000;
 
 // One game of each kind lives here, kept with the server, so Back never loses it and
@@ -125,25 +137,45 @@ export default function App() {
   const [mahjongLevel, setMahjongLevel] = useState<Level>('easy');
   const [logoutNote, setLogoutNote] = useState('');
   const [askingLogout, setAskingLogout] = useState(false);
+  const [leaving, setLeaving] = useState(false);
   const mahjong = useSavedGame('mahjong');
   const sudoku = useSavedGame('sudoku');
   const online = useOnline();
   const goHome = () => setScreen('home');
+  const sessionGone = mahjong.signedOut || sudoku.signedOut;
+  const sessionAlive = mahjong.signedIn || sudoku.signedIn;
+
+  useEffect(takeLoggedInMark, []);
+
+  // A log out left unconfirmed, on a boot that came back to the app. Said only once the
+  // server has answered: a page from the worker's cache knows nothing about the session.
+  useEffect(() => {
+    if (!logoutUnconfirmed() || (!sessionGone && !sessionAlive)) return;
+    forgetLogoutUnconfirmed();
+    if (!sessionGone) setLogoutNote(LOGOUT_UNCONFIRMED);
+  }, [sessionGone, sessionAlive]);
 
   const logOut = async () => {
+    setLeaving(true);
     // A save still on its way would otherwise arrive after the session has ended.
     setLogoutNote('Saving your last moves.');
     const sent = await Promise.all([mahjong.flush(), sudoku.flush()]);
     setLogoutNote('');
     if (sent.every(Boolean)) await endSession();
-    else setAskingLogout(true);
+    else {
+      setLeaving(false);
+      setAskingLogout(true);
+    }
   };
 
   // A quick refusal or a dead link leaves the device as it is: the session can't be ended
   // offline, so the game stays until it can. Past the patience the device is cleared
   // without waiting: the server may well have ended the session with its answer held up.
-  // From there any outcome goes to /login, which shows where the session really stands.
+  // From there any outcome goes to /login, which shows where the session really stands: a
+  // live session goes straight back to the app, and the mark tells it this log out failed.
+  // The mark goes on at the patience, not at the failure: a page can leave before that.
   const endSession = async () => {
+    setLeaving(true);
     setLogoutNote('Logging out.');
     let clearing: Promise<unknown> | undefined;
     const clear = () => {
@@ -151,13 +183,18 @@ export default function App() {
       clearing ??= Promise.race([clearDevice(), patience]);
       return clearing;
     };
-    const slow = setTimeout(() => void clear(), LOGOUT_PATIENCE);
+    const slow = setTimeout(() => {
+      markLogoutUnconfirmed();
+      void clear();
+    }, LOGOUT_PATIENCE);
     try {
       await logout();
+      forgetLogoutUnconfirmed();
     } catch {
       if (!clearing) {
         clearTimeout(slow);
         setLogoutNote(LOGOUT_FAILED);
+        setLeaving(false);
         return;
       }
     }
@@ -201,6 +238,7 @@ export default function App() {
         onOpen={setScreen}
         onLogOut={() => void logOut()}
         logOutDisabled={!online}
+        leaving={leaving}
         note={online ? logoutNote : LOGOUT_OFFLINE}
         inert={askingLogout}
       />

@@ -367,7 +367,9 @@ async def login(request: Request) -> Response:
 
     if isinstance(outcome, Response):
         return outcome
-    response = RedirectResponse("/", 303, headers=NO_STORE)
+    # The mark tells the app this session is new, so a log out left unconfirmed earlier in
+    # this tab is over. The login page has no script of its own to say so.
+    response = RedirectResponse("/#logged-in", 303, headers=NO_STORE)
     response.headers.append("set-cookie", _session_cookie(outcome))
     return response
 
