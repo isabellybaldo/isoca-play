@@ -41,4 +41,6 @@ test('the three fonts are self-hosted and named in the theme', () => {
   for (const family of ['Press Start 2P', 'VT323', 'IBM Plex Mono']) {
     expect(css).toContain(`'${family}'`);
   }
+  // A browser only fetches a font on first use: home shows no Plex Mono, so ask for each.
+  expect(readFileSync('src/main.tsx', 'utf8')).toMatch(/document\.fonts\.load/);
 });

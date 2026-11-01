@@ -29,7 +29,8 @@ describe('the built page', () => {
     // React's own code mentions these words, so look at the tags alone.
     const tags = html.replace(/(<(script|style)\b[^>]*>)[\s\S]*?<\/\2>/g, '$1');
     expect(tags).not.toMatch(/crossorigin/);
-    expect(tags).not.toMatch(/<link\b/);
+    // The one link is an empty icon, which stops the browser asking for /favicon.ico.
+    expect(tags.match(/<link\b[^>]*>/g)).toEqual(['<link rel="icon" href="data:," />']);
     expect(tags).not.toMatch(/<script[^>]*\bsrc=/);
     expect(html).toMatch(/<style[\s>]/);
     expect(html).toMatch(/<script[^>]*>[\s\S]{1000}/);
