@@ -1,0 +1,134 @@
+[
+  {
+    "name": "a covered tile is not free",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 0, "y": 0, "z": 1, "face": "b"},
+      {"id": 3, "x": 4, "y": 0, "z": 0, "face": "a"},
+      {"id": 4, "x": 8, "y": 0, "z": 0, "face": "b"}
+    ],
+    "onBoard": [1, 2, 3, 4],
+    "covered": [1],
+    "free": [2, 3, 4],
+    "matchKeys": {}
+  },
+  {
+    "name": "it is freed when the top leaves",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 0, "y": 0, "z": 1, "face": "b"},
+      {"id": 3, "x": 4, "y": 0, "z": 0, "face": "a"},
+      {"id": 4, "x": 8, "y": 0, "z": 0, "face": "b"}
+    ],
+    "onBoard": [1, 3],
+    "covered": [],
+    "free": [1, 3],
+    "matchKeys": {}
+  },
+  {
+    "name": "half-offset tiles still cover",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 1, "y": 1, "z": 1, "face": "a"}
+    ],
+    "onBoard": [1, 2],
+    "covered": [1],
+    "free": [2],
+    "matchKeys": {}
+  },
+  {
+    "name": "a tile a full tile away does not cover",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 2, "y": 0, "z": 1, "face": "a"},
+      {"id": 3, "x": 0, "y": 2, "z": 1, "face": "a"}
+    ],
+    "onBoard": [1, 2, 3],
+    "covered": [],
+    "free": [1, 2, 3],
+    "matchKeys": {}
+  },
+  {
+    "name": "a tile two layers up does not cover",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 0, "y": 0, "z": 2, "face": "a"}
+    ],
+    "onBoard": [1, 2],
+    "covered": [],
+    "free": [1, 2],
+    "matchKeys": {}
+  },
+  {
+    "name": "blocked on both sides is not free, one open side is",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 2, "y": 0, "z": 0, "face": "b"},
+      {"id": 3, "x": 4, "y": 0, "z": 0, "face": "a"},
+      {"id": 4, "x": 0, "y": 8, "z": 0, "face": "b"}
+    ],
+    "onBoard": [1, 2, 3, 4],
+    "covered": [],
+    "free": [1, 3, 4],
+    "matchKeys": {}
+  },
+  {
+    "name": "a neighbour half a tile off in y still blocks the side",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 2, "y": 1, "z": 0, "face": "b"},
+      {"id": 3, "x": 4, "y": 0, "z": 0, "face": "a"}
+    ],
+    "onBoard": [1, 2, 3],
+    "covered": [],
+    "free": [1, 3],
+    "matchKeys": {}
+  },
+  {
+    "name": "neighbours a full row away do not block",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 0, "face": "a"},
+      {"id": 2, "x": 2, "y": 2, "z": 0, "face": "b"},
+      {"id": 3, "x": 4, "y": 0, "z": 0, "face": "a"}
+    ],
+    "onBoard": [1, 2, 3],
+    "covered": [],
+    "free": [1, 2, 3],
+    "matchKeys": {}
+  },
+  {
+    "name": "neighbours on another layer do not block",
+    "tiles": [
+      {"id": 1, "x": 0, "y": 0, "z": 1, "face": "a"},
+      {"id": 2, "x": 2, "y": 0, "z": 0, "face": "b"},
+      {"id": 3, "x": 4, "y": 0, "z": 1, "face": "a"}
+    ],
+    "onBoard": [1, 2, 3],
+    "covered": [],
+    "free": [1, 2, 3],
+    "matchKeys": {}
+  },
+  {
+    "name": "any season, any flower, and everything else only itself",
+    "tiles": [],
+    "onBoard": [],
+    "covered": [],
+    "free": [],
+    "matchKeys": {
+      "spring": "season",
+      "summer": "season",
+      "autumn": "season",
+      "winter": "season",
+      "plum": "flower",
+      "orchid": "flower",
+      "chrysanthemum": "flower",
+      "rose": "flower",
+      "cat": "cat",
+      "heart": "heart",
+      "circle3": "circle3",
+      "circle4": "circle4",
+      "bamboo9": "bamboo9",
+      "star1": "star1"
+    }
+  }
+]

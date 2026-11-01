@@ -1,3 +1,6 @@
+import shared from '../../../shared/layouts.json';
+import faces from '../../../shared/faces.json';
+
 export type Level = 'easy' | 'medium' | 'hard';
 export type Layout = {
   id: string;
@@ -24,127 +27,17 @@ function fromLayers(layers: string[][]): Layout['cells'] {
   return cells;
 }
 
-// A picture frame with a small picture hung in the middle and its corners doubled.
-// 42 tiles, 2 layers.
-const frame = fromLayers([
-  [
-    '########',
-    '#......#',
-    '#......#',
-    '#..##..#',
-    '#..##..#',
-    '#..##..#',
-    '#......#',
-    '#......#',
-    '########',
-  ],
-  [
-    '#.....#',
-    '.......',
-    '.......',
-    '...#...',
-    '...#...',
-    '.......',
-    '.......',
-    '#.....#',
-  ],
-]);
-
-// A cup on a stem and a base, with two handles. 62 tiles, 3 layers.
-const trophy = fromLayers([
-  [
-    '.######.',
-    '#.####.#',
-    '#.####.#',
-    '.######.',
-    '..####..',
-    '...##...',
-    '...##...',
-    '..####..',
-    '.######.',
-  ],
-  [
-    '.#####.',
-    '..###..',
-    '.#####.',
-    '.......',
-    '.......',
-    '.......',
-    '.......',
-    '..###..',
-  ],
-  [
-    '........',
-    '...##...',
-    '...##...',
-  ],
-]);
-
-// Four corner towers joined by walls around a keep. 72 tiles, 4 layers.
-const fort = fromLayers([
-  [
-    '.##..##.',
-    '###..###',
-    '########',
-    '#......#',
-    '#..##..#',
-    '#......#',
-    '########',
-    '###..###',
-    '.##..##.',
-  ],
-  [
-    '##...##',
-    '##...##',
-    '.......',
-    '.......',
-    '.......',
-    '.......',
-    '##...##',
-    '##...##',
-  ],
-  [
-    '........',
-    '.##..##.',
-    '........',
-    '........',
-    '........',
-    '........',
-    '........',
-    '.##..##.',
-  ],
-  [
-    '.......',
-    '.#...#.',
-    '.......',
-    '.......',
-    '.......',
-    '.......',
-    '.#...#.',
-  ],
-]);
-
-export const LAYOUTS: Layout[] = [
-  { id: 'frame', name: 'Frame', level: 'easy', cells: frame },
-  { id: 'trophy', name: 'Trophy', level: 'medium', cells: trophy },
-  { id: 'fort', name: 'Fort', level: 'hard', cells: fort },
-];
+// The shapes themselves are in shared/layouts.json, which the server reads too.
+export const LAYOUTS: Layout[] = shared.map((l) => ({
+  id: l.id,
+  name: l.name,
+  level: l.level as Level,
+  cells: fromLayers(l.layers),
+}));
 
 export function layoutsFor(level: Level): Layout[] {
   return LAYOUTS.filter((l) => l.level === level);
 }
 
-function suit(name: string): string[] {
-  return Array.from({ length: 9 }, (_, i) => `${name}${i + 1}`);
-}
-
 // The 42 faces of the set, in draw order. Their art is in TileArt.tsx.
-export const FACES: string[] = [
-  ...suit('circle'),
-  ...suit('bamboo'),
-  ...suit('star'),
-  'cat', 'bunny', 'frog', 'fish',
-  'cherry', 'cupcake', 'heart',
-  'spring', 'summer', 'autumn', 'winter',
-  'plum', 'orchid', 'chrysanthemum', 'rose',
-];
+export const FACES: string[] = faces.faces;

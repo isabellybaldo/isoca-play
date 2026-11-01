@@ -1,3 +1,5 @@
+import faces from '../../../shared/faces.json';
+
 export type Tile = { id: number; x: number; y: number; z: number; face: string };
 
 // x and y are in half-tile units: a tile is 2 wide and 2 tall.
@@ -12,8 +14,8 @@ export type MahjongState = {
 
 export const SLOT_COUNT = 4;
 
-const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
-const FLOWERS = ['plum', 'orchid', 'chrysanthemum', 'rose'];
+const SEASONS = faces.groups.season;
+const FLOWERS = faces.groups.flower;
 
 // Two tiles pair when their keys are equal: any season matches any season, any
 // flower matches any flower, and everything else matches only itself.

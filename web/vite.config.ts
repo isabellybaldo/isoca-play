@@ -12,6 +12,8 @@ const noCrossorigin = (): Plugin => ({
 export default defineConfig({
   base: './',
   plugins: [react(), noCrossorigin(), viteSingleFile({ removeViteModuleLoader: true })],
+  // shared/ sits beside web/, and the dev server refuses files outside its root.
+  server: { fs: { allow: ['..'] } },
   test: {
     environment: 'jsdom',
   },

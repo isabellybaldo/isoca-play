@@ -1,3 +1,6 @@
+// Removed in Task 6, when the screens ask the server for deals. Until then this is
+// only here so they keep working: the deals' tests moved to server/tests/test_mahjong.py
+// and shared/deal-samples.json, and server/isoca_play/mahjong.py is the real one.
 import { FACES, type Layout } from './layouts';
 import { isFree, matchKey, newGame, type Tile } from './rules';
 
