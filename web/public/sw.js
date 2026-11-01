@@ -27,6 +27,7 @@ const keptTicket = new Map();
 let loggingOut = false; // told by clearDevice: nothing more goes on the device
 let writes = Promise.resolve();
 let activated = false;
+let asking; // the round of asks under way
 
 // A redirect or the login page must never be kept as the app or as a save.
 const worthKeeping = (response) => response.ok && !response.redirected && response.type === 'basic';
@@ -43,6 +44,15 @@ async function precache() {
   );
   const cache = await caches.open(APP_CACHE);
   await Promise.all(urls.map((url, i) => cache.put(url, responses[i])));
+}
+
+// The whole answer in memory, read before it joins the queue of writes: a body that stalls
+// can take until LATE_LIMIT to end, and must not hold up a save the server has confirmed.
+async function inMemory(response) {
+  // By status, not by response.body: a Response refuses any body at all, even an empty one,
+  // with a 204, and a real 204 from fetch can still report a body.
+  const body = response.status === 204 ? null : await response.arrayBuffer();
+  return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
 
 // Opened only to store: a tab left over after log out must not recreate an empty cache.
@@ -77,7 +87,7 @@ async function fetchMissingSaves() {
       const ticket = ++tickets;
       // Pages wait for activation, so a hung link must not hold them up.
       const response = await fetch(url, { signal: AbortSignal.timeout(WAIT_FOR_NETWORK) });
-      if (worthKeeping(response)) await keepSave(url, ticket, response);
+      if (worthKeeping(response)) await keepSave(url, ticket, await inMemory(response));
     }),
   );
 }
@@ -135,7 +145,7 @@ async function loadSave(event) {
   // some time: hung requests would use up the browser's connections.
   const signal = AbortSignal.any([request.signal, AbortSignal.timeout(LATE_LIMIT)]);
   const network = fetch(request, { signal }).then(async (response) => {
-    if (worthKeeping(response)) await keepSave(url, ticket, response.clone());
+    if (worthKeeping(response)) await keepSave(url, ticket, await inMemory(response.clone()));
     return response;
   });
   event.waitUntil(network.catch(() => {}));
@@ -161,19 +171,30 @@ async function asset(request) {
 // Chrome stops the old worker before activating this one. A navigation under way at that
 // moment can hang, so the load that found this worker gets to finish first. A request
 // landing in that moment can wake the old worker and lose the skipWaiting, leaving this
-// one waiting 5 minutes, so it asks again (seen on Chrome 156).
-function askToTakeOver(wait = FIRST_ASK, left = ASK_TIMES) {
-  setTimeout(() => {
-    if (activated || left === 0) return;
-    void self.skipWaiting();
-    askToTakeOver(ASK_AGAIN, left - 1);
-  }, wait);
+// one waiting 5 minutes, so it asks again (seen on Chrome 156). One round at a time.
+function askToTakeOver() {
+  const round = async () => {
+    for (let left = ASK_TIMES, wait = FIRST_ASK; left > 0; left -= 1, wait = ASK_AGAIN) {
+      await new Promise((resolve) => setTimeout(resolve, wait));
+      if (activated) return;
+      void self.skipWaiting();
+    }
+  };
+  asking ??= round().finally(() => {
+    asking = undefined;
+  });
+  return asking;
 }
 
 self.addEventListener('install', (event) => {
   // Taking over soon is safe: a page on an older bundle keeps what it has loaded, and
   // its files stay in the HTTP cache. Nothing here reloads a page; the next load is new.
-  event.waitUntil(precache().then(() => askToTakeOver()));
+  // Not waited for: install has to end before this worker can take over.
+  event.waitUntil(
+    precache().then(() => {
+      void askToTakeOver();
+    }),
+  );
 });
 
 self.addEventListener('activate', (event) => {
@@ -185,11 +206,16 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// From clearDevice, before it removes the caches. The answer means no write can follow.
 self.addEventListener('message', (event) => {
-  if (event.data?.type !== 'logging-out') return;
-  loggingOut = true;
-  event.waitUntil(writes.then(() => event.ports[0]?.postMessage('done')));
+  if (event.data?.type === 'take-over') {
+    // From a later load, which found this worker still waiting: a waiting worker with
+    // nothing to do is stopped, and its timers with it. This keeps it up for the round.
+    event.waitUntil(askToTakeOver());
+  } else if (event.data?.type === 'logging-out') {
+    // From clearDevice, before it removes the caches. The answer means no write can follow.
+    loggingOut = true;
+    event.waitUntil(writes.then(() => event.ports[0]?.postMessage('done')));
+  }
 });
 
 self.addEventListener('fetch', (event) => {

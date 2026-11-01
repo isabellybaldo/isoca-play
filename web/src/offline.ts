@@ -9,7 +9,12 @@ export function registerWorker(): void {
   if (!navigator.serviceWorker) return;
   window.addEventListener('load', () => {
     // No worker only means no offline play, and offline this just fails to update.
-    navigator.serviceWorker.register('/sw.js').catch(() => {});
+    navigator.serviceWorker
+      .register('/sw.js')
+      // Still waiting from an earlier load: its own timers may have died with it. Asked
+      // from here, this load has finished, and the worker waits a little more besides.
+      .then((registration) => registration.waiting?.postMessage({ type: 'take-over' }))
+      .catch(() => {});
   });
 }
 

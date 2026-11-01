@@ -28,7 +28,12 @@ function fakeCaches() {
     const store = stores.get(name) ?? new Map<string, Response>();
     stores.set(name, store);
     return {
-      put: async (key: string | Request, response: Response) => void store.set(pathOf(key), response.clone()),
+      // As a real cache does, this takes the whole body before it stores anything.
+      put: async (key: string | Request, response: Response) => {
+        const copy = response.clone();
+        await response.arrayBuffer();
+        store.set(pathOf(key), copy);
+      },
       match: async (key: string | Request) => store.get(pathOf(key))?.clone(),
       delete: async (key: string | Request) => store.delete(pathOf(key)),
     };
@@ -92,7 +97,17 @@ function worker(network: (path: string, init?: RequestInit) => Response | Promis
         waitUntil: () => {},
       } as never);
     });
-  return { caches, self, fetchIt, lifecycle, request, send, told };
+  // What a later load sends. Gives back what the worker asked to be kept alive for.
+  const askedToTakeOver = () => {
+    const kept: Promise<unknown>[] = [];
+    listeners.message({
+      data: { type: 'take-over' },
+      ports: [],
+      waitUntil: (p: Promise<unknown>) => kept.push(p),
+    } as never);
+    return kept;
+  };
+  return { caches, self, fetchIt, lifecycle, request, send, told, askedToTakeOver };
 }
 
 const noNetwork = (): Response => {
@@ -159,6 +174,55 @@ describe('taking over after install', () => {
     const asked = w.self.skipWaiting.mock.calls.length;
     await vi.advanceTimersByTimeAsync(60_000);
     expect(w.self.skipWaiting).toHaveBeenCalledTimes(asked);
+  });
+
+  // The timers above die with the worker. A later load asks it again, and that wakes it.
+  describe('asked by a later load, its own timers lost', () => {
+    test('waits the same delay before asking, and stays alive for it', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      const w = worker(() => ok());
+      const kept = w.askedToTakeOver();
+      expect(kept).toHaveLength(1);
+      expect(w.self.skipWaiting).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(w.self.skipWaiting).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(w.self.skipWaiting).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(w.self.skipWaiting).toHaveBeenCalledTimes(2);
+      void w.lifecycle('activate');
+      await vi.advanceTimersByTimeAsync(5000);
+      await kept[0];
+      expect(w.self.skipWaiting).toHaveBeenCalledTimes(2);
+    });
+
+    test('a second load does not start a second round, and one after the last ask does', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      const w = worker(() => ok());
+      w.askedToTakeOver();
+      w.askedToTakeOver();
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(w.self.skipWaiting).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(60_000);
+      const asked = w.self.skipWaiting.mock.calls.length;
+      w.askedToTakeOver();
+      await vi.advanceTimersByTimeAsync(2999);
+      expect(w.self.skipWaiting).toHaveBeenCalledTimes(asked);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(w.self.skipWaiting).toHaveBeenCalledTimes(asked + 1);
+    });
+
+    test('a load while install is still counting down adds no earlier ask', async () => {
+      vi.useFakeTimers({ toFake: ['setTimeout'] });
+      const w = worker(() => ok());
+      await w.lifecycle('install');
+      await vi.advanceTimersByTimeAsync(1000);
+      w.askedToTakeOver();
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(w.self.skipWaiting).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(1);
+      expect(w.self.skipWaiting).toHaveBeenCalledTimes(1);
+    });
   });
 
   test('a failed install does not ask', async () => {
@@ -578,6 +642,94 @@ describe('keeping saves', () => {
   });
 });
 
+// A body that stops halfway can take up to the late limit to end.
+describe('a save load whose body stalls', () => {
+  const save = '/api/save/sudoku';
+  function stalling() {
+    let finish = () => {};
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode('{"loaded":'));
+        finish = () => {
+          controller.enqueue(new TextEncoder().encode('1}'));
+          controller.close();
+        };
+      },
+    });
+    return { response: from(new Response(body)), finish: () => finish() };
+  }
+  const network = (stalled: Response) => (_path: string, init?: RequestInit) =>
+    init?.method === 'PUT' ? from(new Response(null, { status: 204 })) : stalled;
+
+  test('holds up no confirmed save, and cannot replace it when it ends', async () => {
+    const stalled = stalling();
+    const w = worker(network(stalled.response));
+    const loading = w.request(save);
+    await vi.waitFor(() => expect(w.fetchIt).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+
+    const put = w.request(save, { method: 'PUT', body: '{"saved":1}' });
+    const answered = await Promise.race([put, new Promise((r) => setTimeout(() => r('held up'), 200))]);
+    expect(answered).not.toBe('held up');
+    expect(await w.caches.held(SAVES, save)!.text()).toBe('{"saved":1}');
+
+    stalled.finish();
+    await loading;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(await w.caches.held(SAVES, save)!.text()).toBe('{"saved":1}');
+  });
+
+  test('does not hold up the answer to clearDevice, and keeps nothing after it', async () => {
+    const stalled = stalling();
+    const w = worker(network(stalled.response));
+    const loading = w.request(save);
+    await vi.waitFor(() => expect(w.fetchIt).toHaveBeenCalledTimes(1));
+    await new Promise((r) => setTimeout(r, 20));
+    const answered = await Promise.race([w.told().then(() => 'told'), new Promise((r) => setTimeout(() => r('held up'), 200))]);
+    expect(answered).toBe('told');
+    stalled.finish();
+    await loading;
+    await new Promise((r) => setTimeout(r, 20));
+    expect(await w.caches.keys()).toEqual([]);
+  });
+
+  test('a body that fails keeps nothing and stops no later write', async () => {
+    const broken = from(
+      new Response(
+        new ReadableStream({
+          pull: (controller) => controller.error(new TypeError('network gone')),
+        }),
+      ),
+    );
+    const w = worker(network(broken));
+    await w.request(save).catch(() => {});
+    expect(w.caches.held(SAVES, save)).toBeUndefined();
+    await w.request(save, { method: 'PUT', body: '{"saved":1}' });
+    expect(await w.caches.held(SAVES, save)!.text()).toBe('{"saved":1}');
+  });
+
+  test('a "no save" that reports an empty body, as fetch in Chrome can, is still kept', async () => {
+    const none = () => {
+      const response = from(new Response(null, { status: 204 }));
+      const empty = new Response(new ArrayBuffer(0));
+      Object.defineProperty(response, 'body', { value: empty.body });
+      return response;
+    };
+    const w = worker(none);
+    await w.lifecycle('activate');
+    expect(w.caches.held(SAVES, save)!.status).toBe(204);
+  });
+
+  test('what is kept from a load keeps its status and headers', async () => {
+    const w = worker(() => from(new Response('{"a":1}', { headers: { 'Content-Type': 'application/json' } })));
+    await w.request(save);
+    const kept = w.caches.held(SAVES, save)!;
+    expect(kept.status).toBe(200);
+    expect(kept.headers.get('Content-Type')).toBe('application/json');
+    expect(await kept.text()).toBe('{"a":1}');
+  });
+});
+
 describe('what the worker leaves alone', () => {
   test.each([
     ['/logout', { method: 'POST' }],
@@ -677,6 +829,36 @@ describe('in the page', () => {
     registerWorker();
     await Promise.resolve();
     expect(register).toHaveBeenCalledExactlyOnceWith('/sw.js');
+  });
+
+  describe('a worker found waiting', () => {
+    function loading(registration: object) {
+      const { register } = device();
+      register.mockResolvedValue(registration);
+      let load = () => {};
+      vi.stubGlobal('window', { addEventListener: (_: string, run: () => void) => (load = run) });
+      registerWorker();
+      return async () => {
+        load();
+        await new Promise((r) => setTimeout(r, 0));
+      };
+    }
+
+    test('is asked to take over, only once the page has loaded', async () => {
+      const postMessage = vi.fn();
+      const load = loading({ waiting: { postMessage } });
+      await new Promise((r) => setTimeout(r, 0));
+      expect(postMessage).not.toHaveBeenCalled();
+      await load();
+      expect(postMessage).toHaveBeenCalledExactlyOnceWith({ type: 'take-over' });
+    });
+
+    test('with none waiting, nothing is sent and nothing fails', async () => {
+      const postMessage = vi.fn();
+      const load = loading({ waiting: null, active: { postMessage } });
+      await load();
+      expect(postMessage).not.toHaveBeenCalled();
+    });
   });
 
   test('where the browser has no workers, registering does nothing', () => {
