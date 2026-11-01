@@ -48,10 +48,18 @@ tapping Tip again would show the same move forever. So a tip is a short chain:
 
 - Start from the written digits and work out the possibilities.
 - Apply the techniques simplest first, in the grader's order, until one places a digit.
-- Show the first step. A Next button walks each step, each drawn and explained, for
-  example "XY-Wing: these squares can't be 4, because…". The last step is the square and
-  its number. A Close button leaves at any point.
+- Keep only the steps that lead to that digit **(owner)**. The engine records what each
+  elimination relied on, walks back from the placement, and drops every step the digit
+  doesn't depend on. Measured before pruning: Easy is always 1 step; about 96% of Medium
+  and Hard tips are 1 step; the longest is 16.
+- Show the first step. A Next button walks each remaining step, each drawn and explained,
+  for example "XY-Wing: these squares can't be 4, because…". The last step is the square
+  and its number. A Close button leaves at any point.
 - A plain single is a one-step chain.
+
+The proof below checks the full run in the grader's order. It must also check that the kept
+steps alone are enough: starting from the same written digits and applying only them, the
+final move is still valid and places the same digit.
 
 Writing the number and tapping Tip again gets the next chain. The player's notes are
 never read or changed, so the tip works with none and is unaffected by wrong ones.
@@ -67,7 +75,12 @@ engine is a TypeScript port in `web/src/sudoku/`, like `rules.ts`. It must be pr
 against the grader: over the whole of `server/isoca_play/data/sudoku_pack.json`, starting
 from the givens, repeatedly applying tips finishes every board at its `solution`, every
 placed digit matches, and the technique order agrees with the Python grader, using a
-shared fixture in the manner of `shared/rule-cases.json`.
+shared fixture in the manner of `shared/rule-cases.json`. Tips restart from the written
+digits, while `solve()` keeps eliminations between placements, so the two traces differ on
+about half the medium and hard boards. The fixture therefore comes from a new Python
+harness that re-runs the grader from the written digits at each tip, not from `solve()`'s
+own trace **(call)**. Measured on the 900 pack boards: restarting finishes all of them with
+every digit correct, and never stuck on about 7,200 partly filled boards.
 
 **Highlight.** Transient view state in the Game component, not in `SudokuState`, so the
 save format and `MOVED` do not change. Any change to the board clears the tip **(call)**.
@@ -82,10 +95,12 @@ A Tip button sits with Return and New game. Disabled unless playing. First match
 
 1. With slots, a tile in a slot has a free match on the board: highlight it. "This pairs
    with the cherry in your slots."
-2. Two free tiles match: highlight both. "Both are open and they match."
-3. With slots, no pair is open: highlight the free tile whose removal uncovers or frees
-   the most tiles, and explain that. If 3 slots are full, say that a fourth tile with no
-   pair loses, so Return may be better.
+2. With 3 slots full and rule 1 not met, any tile sent now is a fourth with no pair and
+   loses at once, even if two free tiles match. Highlight nothing and point to Return. The
+   slots rule itself does not change.
+3. Two free tiles match: highlight both. "Both are open and they match."
+4. With slots, no pair is open: highlight the free tile whose removal uncovers or frees
+   the most tiles, and explain that.
 
 Same transient rule as sudoku: the highlight is not saved, and any move clears it.
 
@@ -128,6 +143,9 @@ Four per difficulty **(owner)**, with Random and the picker working as now:
 - Same grid limits as today: 8 columns by 9 rows at most, an even tile count, at most 36
   pairs, and the overlap rules in `layouts.test.ts`. "About" means the shape may move a
   few tiles from its level's count, but stays within the level's layers **(call)**.
+- The test "is the same from left to right" is not an owner rule and no design asks for it.
+  A crescent moon can't pass it in its usual pose, so new maps need not be symmetric and
+  the test keeps covering only the three existing maps **(call)**.
 - The shapes go in `shared/layouts.json`, copied to `server/isoca_play/shared/`.
   `layouts.test.ts` and `server/tests/test_mahjong.py` pin exactly three maps and must
   change. Every map must deal reliably under `MAX_ATTEMPTS`, tested many times per map.
@@ -167,6 +185,11 @@ All **(call)** except that these are wanted **(owner)**.
   tighten it in a way that refuses saves without `noSlots`.
 - No new runtime dependencies, and nothing new leaves the browser.
 - Existing CI, tests and CSP stay green; the offline e2e must still pass.
+- Old pages opening new saves are accepted, with no defensive code **(call)**: one player,
+  and the worker takes over on the next load. A rollback shows new-map saves as unplayable
+  until a new game replaces them; note that wherever rollback is documented.
+- Only the nine maps wait for approval. The owner declined mockups for the rest, so they
+  are checked on the phone after the build **(call)**.
 
 ## Left to the builder
 
