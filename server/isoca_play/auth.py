@@ -138,10 +138,19 @@ def _record_failure(conn: sqlite3.Connection, ip: str, now: float) -> None:
         raise
 
 
-def _start_session(conn: sqlite3.Connection, ip: str, now: float, old_token: str | None) -> str:
+def _start_session(
+    conn: sqlite3.Connection, ip: str, now: float, old_token: str | None, verified_hash: str
+) -> str | None:
+    """A new token, or None if the password changed while it was being checked."""
     token = secrets.token_urlsafe(TOKEN_BYTES)
     conn.execute("BEGIN IMMEDIATE")
     try:
+        # set-password may have run during the (slow) check; a login that passed
+        # against the old hash must not outlive it.
+        row = conn.execute("SELECT password_hash FROM account WHERE id = 1").fetchone()
+        if row is None or not hmac.compare_digest(row[0].encode(), verified_hash.encode()):
+            conn.execute("ROLLBACK")
+            return None
         conn.execute("DELETE FROM failure WHERE ip = ?", (ip,))
         conn.execute("DELETE FROM session WHERE expires_at <= ?", (now,))
         if old_token:
@@ -172,7 +181,12 @@ def _attempt(settings: Settings, ip: str, password: str, old_token: str | None) 
             _record_failure(conn, ip, now)
             log.warning("login failure from %r", ip)
             return _login_page(WRONG_MESSAGE, 401)
-        return _start_session(conn, ip, now, old_token)
+        token = _start_session(conn, ip, now, old_token, row[0])
+        if token is None:
+            _record_failure(conn, ip, now)
+            log.warning("login failure from %r (password changed mid-check)", ip)
+            return _login_page(WRONG_MESSAGE, 401)
+        return token
     finally:
         conn.close()
 

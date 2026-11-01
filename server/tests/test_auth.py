@@ -446,6 +446,24 @@ def test_a_crowd_past_the_queue_is_refused_fast(settings, password_set, monkeypa
     assert len(calls) == auth.MAX_WAITING
 
 
+def test_a_login_in_flight_does_not_survive_set_password(client, password_set, database):
+    def verify_then_password_changes(stored, password):
+        other = db.connect(client.app.state.settings.db_path)
+        other.execute(
+            "UPDATE account SET password_hash = ? WHERE id = 1",
+            (PasswordHasher().hash("a new one"),),
+        )
+        other.close()
+        return True  # the check passed against the old hash
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(auth, "_verify", verify_then_password_changes)
+        r = post_login(client)
+    assert r.status_code == 401 and set_cookies(r) == []
+    assert rows(database, "session") == 0
+    assert rows(database, "failure") == 1
+
+
 # Origin
 
 
