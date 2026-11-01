@@ -10,6 +10,7 @@ export type MahjongState = {
   selected: number | null;
   history: { onBoard: number[]; slots: number[] }[];
   status: 'playing' | 'won' | 'lost';
+  noSlots?: boolean; // a pair of free matching tiles leaves directly; absent in slots games
 };
 
 export const SLOT_COUNT = 4;
@@ -25,8 +26,9 @@ export function matchKey(face: string): string {
   return face;
 }
 
-export function newGame(tiles: Tile[]): MahjongState {
+export function newGame(tiles: Tile[], options?: { noSlots?: boolean }): MahjongState {
   return {
+    ...(options?.noSlots ? { noSlots: true } : {}),
     tiles,
     onBoard: tiles.map((tile) => tile.id),
     slots: [],
@@ -91,9 +93,44 @@ function send(s: MahjongState, id: number): MahjongState {
   };
 }
 
+// Free tiles that match, as pairs of ids in onBoard order.
+export function freePairs(s: MahjongState): [number, number][] {
+  const free = s.onBoard.filter((id) => isFree(s, id));
+  const keys = free.map((id) => matchKey(tileById(s, id)!.face));
+  const out: [number, number][] = [];
+  for (let i = 0; i < free.length; i++) {
+    for (let j = i + 1; j < free.length; j++) {
+      if (keys[i] === keys[j]) out.push([free[i], free[j]]);
+    }
+  }
+  return out;
+}
+
+// No slots: the pair leaves the board at once. The board is lost when tiles remain and no pair is free.
+function removePair(s: MahjongState, a: number, b: number): MahjongState {
+  const next: MahjongState = {
+    ...s,
+    onBoard: s.onBoard.filter((id) => id !== a && id !== b),
+    selected: null,
+    history: [...s.history, { onBoard: [...s.onBoard], slots: [...s.slots] }],
+  };
+  if (next.onBoard.length === 0) return { ...next, status: 'won' };
+  return { ...next, status: freePairs(next).length === 0 ? 'lost' : 'playing' };
+}
+
+function tapNoSlots(s: MahjongState, id: number): MahjongState {
+  if (s.selected === id) return { ...s, selected: null };
+  if (s.selected === null) return { ...s, selected: id };
+  const held = tileById(s, s.selected);
+  const tile = tileById(s, id);
+  if (held && tile && matchKey(held.face) === matchKey(tile.face)) return removePair(s, s.selected, id);
+  return { ...s, selected: id };
+}
+
 export function tap(s: MahjongState, id: number): MahjongState {
   if (s.status !== 'playing') return s;
   if (!s.onBoard.includes(id) || !isFree(s, id)) return s;
+  if (s.noSlots) return tapNoSlots(s, id);
   if (s.selected === id) return send(s, id);
   return { ...s, selected: id };
 }
