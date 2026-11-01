@@ -12,7 +12,7 @@ server, and deploy secrets only in GitHub.
 
 ### Mahjong
 
-Pick a difficulty, then a layout or random. Every deal can be won.
+Pick a difficulty, then one of four maps per level or random. Every deal can be won.
 
 - A tile with another on top of it is face down. A face-up tile can be taken only if its
   left or right side is open.
@@ -23,15 +23,21 @@ Pick a difficulty, then a layout or random. Every deal can be won.
 - Any season matches any season, and any flower any flower. Everything else matches only
   itself.
 - Return takes back one send, with no limit, including the one that lost the game.
+- Slots are on by default. A Slots switch on the setup screen turns them off for the next
+  game: tap a free tile, then its match, and both leave. The game is lost when no open
+  pair is left. A game keeps the mode it started with.
+- A Tip button points at a good next move. It only highlights; nothing is moved or counted.
 
 ### Sudoku
 
 Easy, medium or hard, set by the techniques a board needs. Every puzzle has exactly one
 solution and can be solved by logic alone.
 
-The game never says a number is wrong while you play. When the board is full it reports
-won or not solved, without saying where. You can then return and keep trying, or start
-over.
+The game never says a number is wrong while you play, unless you ask for a tip. A tip only
+appears when asked for. It names a sudoku move, such as a naked single or an X-wing, draws
+it on the board and says why it works; if a written number is wrong, it points at that
+first. When the board is full the game reports won or not solved, without saying where.
+You can then return and keep trying, or start over.
 
 ## Run it locally
 
