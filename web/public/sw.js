@@ -17,8 +17,9 @@ const WAIT_FOR_NETWORK = 3000; // well under the 10 seconds after which the page
 const STAY_ON_KEPT = 5000; // after a timeout, how long saves skip the network
 const LATE_LIMIT = 30_000;
 const NOT_REACHED = new Set([502, 503, 504]);
-const ASK_EVERY = 500;
-const ASK_TIMES = 50; // about as long as an idle worker lives
+const FIRST_ASK = 3000; // past the load that found this worker
+const ASK_AGAIN = 5000;
+const ASK_TIMES = 5; // about as long as an idle worker lives
 
 let noAnswerUntil = 0;
 let tickets = 0;
@@ -157,26 +158,22 @@ async function asset(request) {
   return (await caches.match(request.url)) ?? fetch(request);
 }
 
-// Chrome stops the old worker before activating this one, and a request landing in that
-// moment wakes the old worker and loses the skipWaiting: this one then waits 5 minutes,
-// and a navigation in that state hangs. Asking again ends it at once (Chrome 156).
-function keepAskingToTakeOver(left = ASK_TIMES) {
+// Chrome stops the old worker before activating this one. A navigation under way at that
+// moment can hang, so the load that found this worker gets to finish first. A request
+// landing in that moment can wake the old worker and lose the skipWaiting, leaving this
+// one waiting 5 minutes, so it asks again (seen on Chrome 156).
+function askToTakeOver(wait = FIRST_ASK, left = ASK_TIMES) {
   setTimeout(() => {
     if (activated || left === 0) return;
     void self.skipWaiting();
-    keepAskingToTakeOver(left - 1);
-  }, ASK_EVERY);
+    askToTakeOver(ASK_AGAIN, left - 1);
+  }, wait);
 }
 
 self.addEventListener('install', (event) => {
-  // Taking over at once is safe: a page on an older bundle keeps what it has loaded, and
+  // Taking over soon is safe: a page on an older bundle keeps what it has loaded, and
   // its files stay in the HTTP cache. Nothing here reloads a page; the next load is new.
-  event.waitUntil(
-    precache().then(() => {
-      keepAskingToTakeOver();
-      return self.skipWaiting();
-    }),
-  );
+  event.waitUntil(precache().then(() => askToTakeOver()));
 });
 
 self.addEventListener('activate', (event) => {

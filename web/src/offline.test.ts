@@ -105,12 +105,11 @@ afterEach(() => {
 });
 
 describe('install', () => {
-  test('keeps the shell and every asset under this version, and takes over at once', async () => {
+  test('keeps the shell and every asset under this version', async () => {
     const w = worker((path) => ok(`file ${path}`));
     await w.lifecycle('install');
     expect(await w.caches.held(APP, '/')!.text()).toBe('file /');
     expect(await w.caches.held(APP, ASSET)!.text()).toBe(`file ${ASSET}`);
-    expect(w.self.skipWaiting).toHaveBeenCalled();
   });
 
   test.each([
@@ -131,23 +130,25 @@ describe('install', () => {
   });
 });
 
-// Chrome can lose a skipWaiting: if a request wakes the old worker while it is being
-// stopped, the new one sits waiting for 5 minutes, and a navigation in that state hangs.
-// Asking again ends it at once (seen on Chrome 156).
+// Chrome stops the old worker to activate the new one. A navigation under way at that
+// moment can hang, and a request landing then can lose the skipWaiting for 5 minutes
+// (Chrome 156). So the new worker lets the load that found it finish, and asks again if
+// it is still waiting.
 describe('taking over after install', () => {
   afterEach(() => vi.useRealTimers());
 
-  test('keeps asking until it is activated, then stops', async () => {
+  test('waits for the load under way, then keeps asking until it is activated', async () => {
     vi.useFakeTimers({ toFake: ['setTimeout'] });
     const w = worker(() => ok());
     await w.lifecycle('install');
+    expect(w.self.skipWaiting).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(3000);
     expect(w.self.skipWaiting).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1000);
-    const asked = w.self.skipWaiting.mock.calls.length;
-    expect(asked).toBeGreaterThan(1);
-    void w.lifecycle('activate');
     await vi.advanceTimersByTimeAsync(5000);
-    expect(w.self.skipWaiting).toHaveBeenCalledTimes(asked);
+    expect(w.self.skipWaiting).toHaveBeenCalledTimes(2);
+    void w.lifecycle('activate');
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(w.self.skipWaiting).toHaveBeenCalledTimes(2);
   });
 
   test('gives up in the end, as a worker cannot wait for ever', async () => {

@@ -203,6 +203,13 @@ function publish(release) {
 }
 
 let browser;
+// A navigation Chrome has lost can leave a page call waiting for ever. Closing the browser
+// ends those calls, so a stuck run fails and cleans up.
+const watchdog = setTimeout(() => {
+  failures += 1;
+  console.log('FAIL  the run took over 10 minutes');
+  browser?.close().catch(() => {});
+}, 600_000);
 try {
   prepare();
   const releaseA = await buildRelease('release-a');
@@ -664,6 +671,7 @@ try {
   failures += 1;
   console.log(`FAIL  the run stopped early\n      ${error.stack ?? error}`);
 } finally {
+  clearTimeout(watchdog);
   await browser?.close().catch(() => {});
   await stopServer().catch(() => {});
   rmSync(temp, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
