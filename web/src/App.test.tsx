@@ -502,6 +502,54 @@ describe('the server', () => {
     expect(goToLogin).not.toHaveBeenCalled();
   });
 
+  test('a slow log out clears the device without waiting, then goes to login', async () => {
+    const user = userEvent.setup();
+    const clear = vi.spyOn(offline, 'clearDevice');
+    await open();
+    let answer = () => {};
+    server.gate = new Promise<void>((resolve) => (answer = resolve));
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3200));
+    });
+    expect(clear).toHaveBeenCalledOnce();
+    expect(goToLogin).not.toHaveBeenCalled();
+    answer();
+    await settle();
+    await settle();
+    expect(clear).toHaveBeenCalledOnce();
+    expect(goToLogin).toHaveBeenCalledOnce();
+  }, 10_000);
+
+  test('a log out that never answers does not claim failure: the device is clear, and login says where it stands', async () => {
+    const user = userEvent.setup();
+    const clear = vi.spyOn(offline, 'clearDevice');
+    await open();
+    let abort = (_: Error) => {};
+    server.gate = new Promise<void>((_resolve, reject) => (abort = reject));
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3200));
+    });
+    abort(new DOMException('Aborted', 'AbortError'));
+    await settle();
+    await settle();
+    expect(clear).toHaveBeenCalledOnce();
+    expect(goToLogin).toHaveBeenCalledOnce();
+    expect(screen.queryByText('That did not work. Try again.')).toBeNull();
+  }, 10_000);
+
+  test('a clearing that hangs does not hold up the log out', async () => {
+    const user = userEvent.setup();
+    vi.spyOn(offline, 'clearDevice').mockImplementation(() => new Promise(() => {}));
+    await open();
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 3200));
+    });
+    expect(goToLogin).toHaveBeenCalledOnce();
+  }, 10_000);
+
   test('offline the marker shows with nothing waiting', async () => {
     const { container } = await open();
     goOffline();

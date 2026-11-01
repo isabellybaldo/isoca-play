@@ -131,6 +131,44 @@ describe('install', () => {
   });
 });
 
+// Chrome can lose a skipWaiting: if a request wakes the old worker while it is being
+// stopped, the new one sits waiting for 5 minutes, and a navigation in that state hangs.
+// Asking again ends it at once (seen on Chrome 156).
+describe('taking over after install', () => {
+  afterEach(() => vi.useRealTimers());
+
+  test('keeps asking until it is activated, then stops', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const w = worker(() => ok());
+    await w.lifecycle('install');
+    expect(w.self.skipWaiting).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    const asked = w.self.skipWaiting.mock.calls.length;
+    expect(asked).toBeGreaterThan(1);
+    void w.lifecycle('activate');
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(w.self.skipWaiting).toHaveBeenCalledTimes(asked);
+  });
+
+  test('gives up in the end, as a worker cannot wait for ever', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const w = worker(() => ok());
+    await w.lifecycle('install');
+    await vi.advanceTimersByTimeAsync(60_000);
+    const asked = w.self.skipWaiting.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(w.self.skipWaiting).toHaveBeenCalledTimes(asked);
+  });
+
+  test('a failed install does not ask', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] });
+    const w = worker(() => from(new Response('', { status: 404 })));
+    await expect(w.lifecycle('install')).rejects.toThrow();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(w.self.skipWaiting).not.toHaveBeenCalled();
+  });
+});
+
 describe('activate', () => {
   const stored = async (w: ReturnType<typeof worker>, name: string, path: string, text: string) =>
     (await w.caches.open(name)).put(path, new Response(text));

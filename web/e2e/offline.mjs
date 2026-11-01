@@ -390,8 +390,8 @@ try {
     await goOnline();
     await button(page, 'Resume Easy, 1 move').waitFor({ timeout: 15000 });
     await page.waitForTimeout(1500);
+    await noMarker();
     same(putsSeen('sudoku'), putsBefore, 'PUTs reaching the server');
-    same(await marker(page).count(), 0, 'markers');
   });
   await check('the kept save is back on the device', async () => {
     same(await heldMoves('sudoku'), 1, 'moves kept');
@@ -402,8 +402,8 @@ try {
     await home();
     await goOnline();
     await page.waitForTimeout(1500);
+    await noMarker();
     same(putsSeen('sudoku'), putsBefore, 'PUTs reaching the server');
-    same(await marker(page).count(), 0, 'markers');
   });
   await check('moves made offline with the page open reach the server on return', async () => {
     await reload();
@@ -584,14 +584,19 @@ try {
   await check('offline after the release, a reload runs the new version', async () => {
     await page.bringToFront();
     await goOffline();
-    await reload();
-    await home();
-    same(await page.evaluate(() => globalThis.__isocaRelease), 'B', 'release');
-    await button(page, /Sudoku/).click();
-    await button(page, 'Resume Easy, 6 moves').waitFor();
-    await button(page, 'Back to home').click();
-    same(await stillOld(oldPage), true, 'old page');
-    await goOnline();
+    try {
+      await reload();
+      await home();
+      same(await page.evaluate(() => globalThis.__isocaRelease), 'B', 'release');
+      await button(page, /Sudoku/).click();
+      await button(page, 'Resume Easy, 6 moves').waitFor();
+      await button(page, 'Back to home').click();
+      same(await stillOld(oldPage), true, 'old page');
+    } finally {
+      // A failure here must not leave the rest of the run offline: the log out checks
+      // would then fail too, and look like a log out bug.
+      await goOnline();
+    }
     await noMarker();
   });
   await oldPage.close();

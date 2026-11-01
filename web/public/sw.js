@@ -17,12 +17,15 @@ const WAIT_FOR_NETWORK = 3000; // well under the 10 seconds after which the page
 const STAY_ON_KEPT = 5000; // after a timeout, how long saves skip the network
 const LATE_LIMIT = 30_000;
 const NOT_REACHED = new Set([502, 503, 504]);
+const ASK_EVERY = 500;
+const ASK_TIMES = 50; // about as long as an idle worker lives
 
 let noAnswerUntil = 0;
 let tickets = 0;
 const keptTicket = new Map();
 let loggingOut = false; // told by clearDevice: nothing more goes on the device
 let writes = Promise.resolve();
+let activated = false;
 
 // A redirect or the login page must never be kept as the app or as a save.
 const worthKeeping = (response) => response.ok && !response.redirected && response.type === 'basic';
@@ -154,13 +157,30 @@ async function asset(request) {
   return (await caches.match(request.url)) ?? fetch(request);
 }
 
+// Chrome stops the old worker before activating this one, and a request landing in that
+// moment wakes the old worker and loses the skipWaiting: this one then waits 5 minutes,
+// and a navigation in that state hangs. Asking again ends it at once (Chrome 156).
+function keepAskingToTakeOver(left = ASK_TIMES) {
+  setTimeout(() => {
+    if (activated || left === 0) return;
+    void self.skipWaiting();
+    keepAskingToTakeOver(left - 1);
+  }, ASK_EVERY);
+}
+
 self.addEventListener('install', (event) => {
   // Taking over at once is safe: a page on an older bundle keeps what it has loaded, and
   // its files stay in the HTTP cache. Nothing here reloads a page; the next load is new.
-  event.waitUntil(precache().then(() => self.skipWaiting()));
+  event.waitUntil(
+    precache().then(() => {
+      keepAskingToTakeOver();
+      return self.skipWaiting();
+    }),
+  );
 });
 
 self.addEventListener('activate', (event) => {
+  activated = true;
   event.waitUntil(
     removeOldCaches()
       .then(fetchMissingSaves)

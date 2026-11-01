@@ -116,6 +116,7 @@ function Mahjong({
 
 const LOGOUT_OFFLINE = 'Logging out needs a connection.';
 const LOGOUT_FAILED = 'That did not work. Try again.';
+const LOGOUT_PATIENCE = 3000;
 
 // One game of each kind lives here, kept with the server, so Back never loses it and
 // any device opens where the last one stopped.
@@ -138,16 +139,30 @@ export default function App() {
     else setAskingLogout(true);
   };
 
+  // A quick refusal or a dead link leaves the device as it is: the session can't be ended
+  // offline, so the game stays until it can. Past the patience the device is cleared
+  // without waiting: the server may well have ended the session with its answer held up.
+  // From there any outcome goes to /login, which shows where the session really stands.
   const endSession = async () => {
+    setLogoutNote('Logging out.');
+    let clearing: Promise<unknown> | undefined;
+    const clear = () => {
+      const patience = new Promise((resolve) => setTimeout(resolve, LOGOUT_PATIENCE));
+      clearing ??= Promise.race([clearDevice(), patience]);
+      return clearing;
+    };
+    const slow = setTimeout(() => void clear(), LOGOUT_PATIENCE);
     try {
       await logout();
     } catch {
-      setLogoutNote(LOGOUT_FAILED);
-      return;
+      if (!clearing) {
+        clearTimeout(slow);
+        setLogoutNote(LOGOUT_FAILED);
+        return;
+      }
     }
-    // Only a log out the server took: the session can't be ended offline, so the game
-    // stays on the device until it can.
-    await clearDevice();
+    clearTimeout(slow);
+    await clear();
     goToLogin();
   };
 
