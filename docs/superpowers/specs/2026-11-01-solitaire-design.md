@@ -1,6 +1,6 @@
 # Solitaire
 
-Date: 2026-11-01. Marks: **(owner)** was said or approved by the owner; **(call)** was
+Date: 2026-11-01. Status: approved by the owner 2026-11-01. Marks: **(owner)** was said or approved by the owner; **(call)** was
 decided while writing this and can be overruled. Read with
 `2026-10-31-isoca-play-design.md` and `2026-11-01-tips-maps-no-slots-design.md`. Their
 login, saves, offline, deploy and process rules apply here unless this says otherwise.
