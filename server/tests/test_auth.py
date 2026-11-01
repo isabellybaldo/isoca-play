@@ -397,7 +397,7 @@ def test_a_restart_does_not_clear_the_slowdown(settings, client, password_set):
 # The check itself runs one at a time, and a crowd is turned away
 
 
-def concurrent_logins(settings, count):
+def concurrent_logins(settings, count, one_ip=None):
     async def go():
         transport = httpx.ASGITransport(app=create_app(settings))
         async with httpx.AsyncClient(transport=transport, base_url=BASE_URL) as c:
@@ -406,7 +406,7 @@ def concurrent_logins(settings, count):
                     c.post(
                         "/login",
                         data={"password": WRONG},
-                        headers={"X-Forwarded-For": f"10.2.0.{i}", **ORIGIN},
+                        headers={"X-Forwarded-For": one_ip or f"10.2.0.{i}", **ORIGIN},
                     )
                     for i in range(count)
                 )
@@ -462,6 +462,17 @@ def test_a_login_in_flight_does_not_survive_set_password(client, password_set, d
     assert r.status_code == 401 and set_cookies(r) == []
     assert rows(database, "session") == 0
     assert rows(database, "failure") == 1
+
+
+def test_eight_concurrent_guesses_from_one_ip_leave_five_failures(
+    settings, password_set, database
+):
+    answers = concurrent_logins(settings, auth.MAX_WAITING, one_ip="203.0.113.9")
+    assert all(a.status_code == 401 for a in answers)
+    assert database.execute(
+        "SELECT COUNT(*) FROM failure WHERE ip = ?", ("203.0.113.9",)
+    ).fetchone()[0] == auth.BLOCK_AFTER == 5
+    assert rows(database, "failure") == 5
 
 
 # Origin
