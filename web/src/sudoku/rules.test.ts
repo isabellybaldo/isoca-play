@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { newSudoku, pressDigit, selectCell, setMode, undo } from './rules';
+import { newSudoku, pressDigit, selectCell, setMode, undo, wrongCells } from './rules';
 import type { SudokuState } from './rules';
 import { blanked } from '../fakeServer.testutil';
 
@@ -125,5 +125,26 @@ describe('sudoku rules', () => {
       'status',
       'values',
     ]);
+  });
+});
+
+describe('wrongCells', () => {
+  test('lists the written squares that differ from the solution, and nothing else', () => {
+    let s = newSudoku(P);
+    expect(wrongCells(s)).toEqual([]);
+    const [a, b, c] = emptyCells;
+    s = pressDigit(selectCell(s, a), wrongFor(a));
+    s = pressDigit(selectCell(s, b), sol(b));
+    s = pressDigit(setMode(selectCell(s, c), 'notes'), wrongFor(c)); // a note is not a number
+    expect(wrongCells(s)).toEqual([a]);
+  });
+
+  test('a given is never wrong, and an emptied square is not', () => {
+    let s = newSudoku(P);
+    const a = emptyCells[0];
+    s = pressDigit(selectCell(s, a), wrongFor(a));
+    s = pressDigit(s, wrongFor(a));
+    expect(wrongCells(s)).toEqual([]);
+    expect(wrongCells({ ...s, values: s.values.map((v, i) => (i === givenCell ? 0 : v)) })).toEqual([]);
   });
 });

@@ -3,7 +3,8 @@ import { newGameProblem, newSudoku as askForPuzzle, REPLACE_UNPLAYABLE, startNot
 import ConfirmDialog from '../ConfirmDialog';
 import type { Level } from '../mahjong/layouts';
 import ResumeButton from '../ResumeButton';
-import { hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, type SudokuState } from './rules';
+import { hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, wrongCells, type SudokuState } from './rules';
+import { tipChain, type TipStep } from './tips';
 import './sudoku.css';
 
 const LEVELS: { id: Level; name: string; line: string }[] = [
@@ -14,16 +15,50 @@ const LEVELS: { id: Level; name: string; line: string }[] = [
 
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-// What the square says to a screen reader: what it holds, never whether that is right.
-function describe(state: SudokuState, cell: number): string {
+// What the square says to a screen reader: what it holds, never whether that is right. Only
+// while a tip is open, because the player asked, does it add ", tip" or ", wrong".
+function describe(state: SudokuState, cell: number, mark: Mark): string {
   const place = `Row ${Math.floor(cell / 9) + 1}, column ${(cell % 9) + 1}`;
-  if (state.puzzle.givens[cell] !== '.') return `${place}, given ${state.values[cell]}`;
-  if (state.values[cell] !== 0) return `${place}, written ${state.values[cell]}`;
+  const tail = (mark.lit ? ', tip' : '') + (mark.wrong ? ', wrong' : '');
+  if (state.puzzle.givens[cell] !== '.') return `${place}, given ${state.values[cell]}${tail}`;
+  if (state.values[cell] !== 0) return `${place}, written ${state.values[cell]}${tail}`;
   const noted = DIGITS.filter((d) => state.notes[cell] & (1 << (d - 1)));
-  return noted.length > 0 ? `${place}, notes ${noted.join(' ')}` : `${place}, empty`;
+  return (noted.length > 0 ? `${place}, notes ${noted.join(' ')}` : `${place}, empty`) + tail;
 }
 
-function Cell({ state, cell, onSelect }: { state: SudokuState; cell: number; onSelect: (cell: number) => void }) {
+// What an open tip draws in one square. None of it is in the game's state.
+type Mark = { lit: boolean; wrong: boolean; cuts: number[]; placed: number | null };
+
+// A tip is a view of the board it was asked on; any change to the numbers or notes ends it.
+type TipView = { kind: 'wrong' } | { kind: 'none' } | { kind: 'steps'; steps: TipStep[]; at: number };
+type Tip = { values: number[]; notes: number[]; history: SudokuState['history']; view: TipView };
+
+function marksFor(view: TipView | null, wrong: number[]): Mark[] {
+  const marks: Mark[] = Array.from({ length: 81 }, () => ({ lit: false, wrong: false, cuts: [], placed: null }));
+  if (view?.kind === 'wrong') for (const c of wrong) marks[c].wrong = true;
+  if (view?.kind === 'steps') {
+    const step = view.steps[view.at];
+    for (const c of step.cells) marks[c].lit = true;
+    for (const { cell, digit } of step.removes) marks[cell].cuts.push(digit);
+    if (step.places) {
+      marks[step.places.cell].lit = true;
+      marks[step.places.cell].placed = step.places.digit;
+    }
+  }
+  return marks;
+}
+
+function Cell({
+  state,
+  cell,
+  mark,
+  onSelect,
+}: {
+  state: SudokuState;
+  cell: number;
+  mark: Mark;
+  onSelect: (cell: number) => void;
+}) {
   const given = state.puzzle.givens[cell] !== '.';
   const value = state.values[cell];
   const selected = state.selected === cell;
@@ -33,6 +68,9 @@ function Cell({ state, cell, onSelect }: { state: SudokuState; cell: number; onS
   if (given) classes.push('is-given');
   else if (value !== 0) classes.push('is-written');
   if (selected) classes.push('is-selected');
+  if (mark.lit) classes.push('is-tip');
+  if (mark.wrong) classes.push('is-wrong');
+  if (mark.placed !== null) classes.push('is-placed');
   const style = {
     borderRightWidth: col === 8 ? 0 : col % 3 === 2 ? 3 : 1,
     borderBottomWidth: row === 8 ? 0 : row % 3 === 2 ? 3 : 1,
@@ -45,12 +83,22 @@ function Cell({ state, cell, onSelect }: { state: SudokuState; cell: number; onS
       type="button"
       className={classes.join(' ')}
       style={style}
-      aria-label={describe(state, cell)}
+      aria-label={describe(state, cell, mark)}
       aria-pressed={selected}
       onClick={() => onSelect(cell)}
     >
       {value !== 0 ? (
         <span className="value">{value}</span>
+      ) : mark.placed !== null ? (
+        <span className="tip-digit" aria-hidden="true">{mark.placed}</span>
+      ) : mark.cuts.length > 0 ? (
+        <span className="notes" aria-hidden="true">
+          {DIGITS.map((d) => (
+            <span key={d} className={mark.cuts.includes(d) ? 'tip-cut' : undefined}>
+              {mark.cuts.includes(d) ? d : ''}
+            </span>
+          ))}
+        </span>
       ) : state.notes[cell] !== 0 ? (
         <span className="notes" aria-hidden="true">
           {DIGITS.map((d) => {
@@ -82,6 +130,7 @@ function Game({
   const [asking, setAsking] = useState(false);
   const [starting, setStarting] = useState(false);
   const [problem, setProblem] = useState('');
+  const [tip, setTip] = useState<Tip | null>(null);
   const deal = async () => {
     setStarting(true);
     setProblem('');
@@ -96,6 +145,29 @@ function Game({
   };
   const note = startNote({ online, starting, problem });
   const name = LEVELS.find((l) => l.id === level)!.name;
+
+  const view =
+    tip && tip.values === state.values && tip.notes === state.notes && tip.history === state.history ? tip.view : null;
+  const marks = marksFor(view, view ? wrongCells(state) : []);
+  const showTip = (v: TipView) => setTip({ values: state.values, notes: state.notes, history: state.history, view: v });
+  // Worked out here, on the tap, never on a render.
+  const ask = () => {
+    if (wrongCells(state).length > 0) return showTip({ kind: 'wrong' });
+    const steps = tipChain(state.values);
+    showTip(steps.length > 0 ? { kind: 'steps', steps, at: 0 } : { kind: 'none' });
+  };
+  const text =
+    view?.kind === 'wrong'
+      ? 'Fix the wrong numbers first.'
+      : view?.kind === 'none'
+        ? 'No tip for this board.'
+        : view?.kind === 'steps'
+          ? view.steps[view.at].because
+          : state.status === 'won'
+            ? 'You won.'
+            : state.status === 'unsolved'
+              ? 'Not solved.'
+              : '';
 
   return (
     <>
@@ -118,13 +190,27 @@ function Game({
 
         <div className="sd-board" role="group" aria-label="Board">
           {state.values.map((_, cell) => (
-            <Cell key={cell} state={state} cell={cell} onSelect={(c) => onChange((s) => selectCell(s, c))} />
+            <Cell key={cell} state={state} cell={cell} mark={marks[cell]} onSelect={(c) => onChange((s) => selectCell(s, c))} />
           ))}
         </div>
 
-        <div role="status" className="sd-note">
-          {state.status === 'won' ? 'You won.' : state.status === 'unsolved' ? 'Not solved.' : ''}
+        <div role="status" className={view ? 'sd-note sd-tip' : 'sd-note'}>
+          {text}
         </div>
+        {view && (
+          <div className="sd-tipbtns">
+            {view.kind === 'steps' && view.at < view.steps.length - 1 && (
+              <button
+                type="button"
+                className="back"
+                onClick={() => setTip({ ...tip!, view: { ...view, at: view.at + 1 } })}
+              >
+                Next
+              </button>
+            )}
+            <button type="button" className="back" onClick={() => setTip(null)}>Close</button>
+          </div>
+        )}
 
         <div className="sd-controls">
           <div className="sd-modes" role="group" aria-label="Mode">
@@ -145,14 +231,17 @@ function Game({
               Notes
             </button>
           </div>
-          <button
-            type="button"
-            className="back"
-            disabled={state.history.length === 0}
-            onClick={() => onChange(undo)}
-          >
-            Return
-          </button>
+          <div className="sd-acts">
+            <button type="button" className="back" disabled={state.status === 'won'} onClick={ask}>Tip</button>
+            <button
+              type="button"
+              className="back"
+              disabled={state.history.length === 0}
+              onClick={() => onChange(undo)}
+            >
+              Return
+            </button>
+          </div>
         </div>
 
         <div className={state.mode === 'notes' ? 'sd-pad is-notes' : 'sd-pad'} role="group" aria-label="Numbers">
@@ -263,7 +352,10 @@ export default function SudokuGame({
           line={unplayable ? REPLACE_UNPLAYABLE : 'This game will be lost.'}
           keepLabel="Keep playing"
           confirmLabel="Start new game"
-          onKeep={() => setReplacing(null)}
+          onKeep={() => {
+            setReplacing(null);
+            if (game) setPlaying(true);
+          }}
           onConfirm={() => {
             void start(replacing);
             setReplacing(null);

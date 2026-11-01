@@ -133,10 +133,11 @@ write the real number.
 - Writing a number replaces that square's notes. **(owner confirmed)**
 - Return undoes one change, of either kind, with no limit. **(owner confirmed)**
 
-**No warnings (owner).** No red numbers, no mistake count, no hints, no timer. To
-keep that honest **(call)**: notes are never erased automatically, and same-number
-highlighting is left out, since either would expose conflicts. Only the selected
-square is highlighted.
+**No warnings (owner).** No red numbers, no mistake count, no hints, no timer. (Tips on
+request were added later, see `2026-11-01-tips-maps-no-slots-design.md`; nothing is ever
+shown unasked.) To keep that honest **(call)**: notes are never erased automatically, and
+same-number highlighting is left out, since either would expose conflicts. Only the
+selected square is highlighted.
 
 **End (owner confirmed).** When the board is full it reports won or not solved,
 without saying where. The player can then return and keep trying, or start over.
@@ -267,7 +268,8 @@ push to main (owner)
 This key can only name a digest of this one image, never run docker or touch the
 edge. The route in `edge/dynamic/play.yml` ships through `isoca-infra`'s own workflow. The
 box keeps the previous digest, and `rollback` restores it. Database changes must be
-additive so a rollback stays safe.
+additive so a rollback stays safe. A rollback past the tips-and-maps release shows saves
+on the new maps as unplayable until a new game replaces them.
 
 **Changes in `isoca-infra`.**
 

@@ -172,9 +172,21 @@ def test_a_layout_that_cannot_be_dealt_raises_instead_of_looping():
 # Layouts and the shared files
 
 
-def test_the_layouts_are_the_three_shapes_at_their_sizes():
+def test_the_layouts_are_the_twelve_shapes_at_their_sizes():
     sizes = {l["id"]: (l["level"], len(l["cells"])) for l in LAYOUTS}
-    assert sizes == {"frame": ("easy", 42), "trophy": ("medium", 62), "fort": ("hard", 72)}
+    assert sizes == {
+        "frame": ("easy", 42), "heart": ("easy", 42), "cat": ("easy", 44), "cherry": ("easy", 44),
+        "trophy": ("medium", 62), "butterfly": ("medium", 62), "panda": ("medium", 62), "moon": ("medium", 62),
+        "fort": ("hard", 72), "rose": ("hard", 72), "frog": ("hard", 72), "gate": ("hard", 72),
+    }
+    for level in ("easy", "medium", "hard"):
+        assert len([l for l in LAYOUTS if l["level"] == level]) == 4
+
+
+@pytest.mark.parametrize("layout", LAYOUTS, ids=lambda l: l["id"])
+def test_every_map_deals_fifty_times_without_an_error(layout):
+    for seed in range(1, 51):
+        make_deal(layout, seed)
 
 
 def test_shared_rule_cases_hold():

@@ -36,26 +36,36 @@ test.each(LAYOUTS)('$id: upper tiles sit half a tile off the layer below and res
   expect(uppers.some((c) => c.x % 2 === 1 && c.y % 2 === 1)).toBe(true);
 });
 
-test.each(LAYOUTS)('$id is the same from left to right', (l) => {
+test.each(LAYOUTS.filter((l) => ['frame', 'trophy', 'fort'].includes(l.id)))('$id is the same from left to right', (l) => {
   const maxX = Math.max(...l.cells.map((c) => c.x));
   const key = (x: number, y: number, z: number) => `${x},${y},${z}`;
   const all = new Set(l.cells.map((c) => key(c.x, c.y, c.z)));
   for (const c of l.cells) expect(all.has(key(maxX - c.x, c.y, c.z))).toBe(true);
 });
 
-test('each level has one shape, and harder shapes stack higher', () => {
-  const top = (id: string) => Math.max(...LAYOUTS.find((l) => l.id === id)!.cells.map((c) => c.z));
-  expect(top('frame')).toBeLessThan(top('trophy'));
-  expect(top('trophy')).toBeLessThan(top('fort'));
+test('harder shapes stack higher', () => {
+  const top = (level: Level) =>
+    Math.max(...layoutsFor(level).flatMap((l) => l.cells.map((c) => c.z)));
+  expect(top('easy')).toBe(1);
+  expect(top('medium')).toBe(2);
+  expect(top('hard')).toBe(3);
 });
 
-test('LAYOUTS has exactly one shape per level', () => {
-  expect(LAYOUTS).toHaveLength(3);
-  const levels: Level[] = ['easy', 'medium', 'hard'];
-  for (const level of levels) expect(layoutsFor(level)).toHaveLength(1);
-  expect(layoutsFor('easy')[0].id).toBe('frame');
-  expect(layoutsFor('medium')[0].id).toBe('trophy');
-  expect(layoutsFor('hard')[0].id).toBe('fort');
+test('LAYOUTS has four shapes per level, the existing one first', () => {
+  expect(LAYOUTS).toHaveLength(12);
+  const ids: Record<Level, string[]> = {
+    easy: ['frame', 'heart', 'cat', 'cherry'],
+    medium: ['trophy', 'butterfly', 'panda', 'moon'],
+    hard: ['fort', 'rose', 'frog', 'gate'],
+  };
+  for (const level of Object.keys(ids) as Level[]) {
+    expect(layoutsFor(level).map((l) => l.id)).toEqual(ids[level]);
+  }
+});
+
+test.each(LAYOUTS)('$id has as many layers as its level', (l) => {
+  const layers = { easy: 2, medium: 3, hard: 4 }[l.level];
+  expect(Math.max(...l.cells.map((c) => c.z)) + 1).toBe(layers);
 });
 
 test('FACES is the approved set, in draw order', () => {

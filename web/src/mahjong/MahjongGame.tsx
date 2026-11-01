@@ -16,6 +16,7 @@ import {
   type Tile,
 } from './rules';
 import { faceName, TileArt, TileBack } from './TileArt';
+import { mahjongTip, type MahjongTip } from './tips';
 import './mahjong.css';
 
 function measureViewport(): { width: number; height: number } {
@@ -37,6 +38,7 @@ function BoardTile({
   left,
   top,
   width,
+  tipped,
   onTap,
 }: {
   state: MahjongState;
@@ -44,6 +46,7 @@ function BoardTile({
   left: number;
   top: number;
   width: number;
+  tipped: boolean;
   onTap: (id: number) => void;
 }) {
   const style = { left, top, width, height: tileHeight(width) };
@@ -83,12 +86,13 @@ function BoardTile({
   }
 
   const selected = state.selected === tile.id;
+  const classes = ['tile', selected && 'is-selected', tipped && 'is-tip'].filter(Boolean).join(' ');
   return (
     <button
       type="button"
-      className={selected ? 'tile is-selected' : 'tile'}
+      className={classes}
       style={style}
-      aria-label={name}
+      aria-label={tipped ? `${name}, tip` : name}
       aria-pressed={selected}
       aria-disabled={state.status !== 'playing'}
       onClick={click}
@@ -108,7 +112,9 @@ function EndNote({ state }: { state: MahjongState }) {
       <p className="mj-end-line">
         {won
           ? `Board cleared in ${state.history.length} moves.`
-          : 'All 4 slots filled with no pair. Return takes the last move back.'}
+          : state.noSlots
+            ? 'No open pair left. Return takes the last move back.'
+            : 'All 4 slots filled with no pair. Return takes the last move back.'}
       </p>
     </div>
   );
@@ -131,6 +137,9 @@ export default function MahjongGame({
   const [asking, setAsking] = useState(false);
   const [starting, setStarting] = useState(false);
   const [problem, setProblem] = useState('');
+  // A tip holds the board it was worked out on and shows only while that board is unchanged.
+  // A tap that only selects a tile keeps both arrays, so it leaves the tip up.
+  const [tip, setTip] = useState<(MahjongTip & { onBoard: number[]; slots: number[] }) | null>(null);
 
   useEffect(() => {
     const measure = () => setViewport(measureViewport());
@@ -143,7 +152,7 @@ export default function MahjongGame({
     setProblem('');
     try {
       const deal = await newMahjong(layout.id);
-      const next = newGame(deal.tiles);
+      const next = newGame(deal.tiles, { noSlots: state.noSlots });
       onChange(() => next);
     } catch (error) {
       setProblem(newGameProblem(error));
@@ -152,12 +161,13 @@ export default function MahjongGame({
     }
   };
   const note = startNote({ online, starting, problem });
-  const width = tileWidth(layout, viewport.width, viewport.height);
+  const width = tileWidth(layout, viewport.width, viewport.height, { noSlots: state.noSlots });
   const box = boardBox(layout, width);
   // Lower layers first, and each row left to right, so upper tiles lie on top.
   const tiles = state.tiles
     .filter((t) => state.onBoard.includes(t.id))
     .sort((a, b) => a.z - b.z || a.y - b.y || a.x - b.x);
+  const shown = tip && tip.onBoard === state.onBoard && tip.slots === state.slots ? tip : null;
   const held = state.slots.map((id) => state.tiles.find((t) => t.id === id)!);
 
   return (
@@ -169,20 +179,22 @@ export default function MahjongGame({
             <span className="mj-moves">Moves: {state.history.length}</span>
           </div>
 
-          <div className="mj-slots">
-            <span className="mj-slots-name" id="mj-slots-name">Slots</span>
-            <ol className="mj-slot-row" aria-labelledby="mj-slots-name">
-              {Array.from({ length: SLOT_COUNT }, (_, i) => (
-                <li key={i} className="mj-slot">
-                  {held[i] ? (
-                    <span className="tile"><TileArt face={held[i].face} /></span>
-                  ) : (
-                    <span className="mj-sr">Empty</span>
-                  )}
-                </li>
-              ))}
-            </ol>
-          </div>
+          {!state.noSlots && (
+            <div className="mj-slots">
+              <span className="mj-slots-name" id="mj-slots-name">Slots</span>
+              <ol className="mj-slot-row" aria-labelledby="mj-slots-name">
+                {Array.from({ length: SLOT_COUNT }, (_, i) => (
+                  <li key={i} className="mj-slot">
+                    {held[i] ? (
+                      <span className="tile"><TileArt face={held[i].face} /></span>
+                    ) : (
+                      <span className="mj-sr">Empty</span>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
 
           <div
             className="mj-board"
@@ -196,12 +208,20 @@ export default function MahjongGame({
                 state={state}
                 tile={tile}
                 width={width}
+                tipped={shown?.tiles.includes(tile.id) ?? false}
                 {...tilePosition(tile, layout, width)}
                 onTap={(id) => onChange((s) => tap(s, id))}
               />
             ))}
             <div role="status"><EndNote state={state} /></div>
           </div>
+
+          <div aria-live="polite" className={shown ? 'mj-tip' : 'mj-tip is-empty'}>{shown?.line}</div>
+          {shown && (
+            <div className="mj-tipbtns">
+              <button type="button" className="back" onClick={own(() => setTip(null))}>Close</button>
+            </div>
+          )}
 
           <div className="mj-actions">
             <button
@@ -211,6 +231,14 @@ export default function MahjongGame({
               onClick={own(() => onChange(undo))}
             >
               Return
+            </button>
+            <button
+              type="button"
+              className="back"
+              disabled={state.status !== 'playing'}
+              onClick={own(() => setTip({ ...mahjongTip(state), onBoard: state.onBoard, slots: state.slots }))}
+            >
+              Tip
             </button>
             <button
               type="button"

@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import rawCases from '../../../shared/rule-cases.json';
 import rawSamples from '../../../shared/deal-samples.json';
 import { FACES, LAYOUTS } from './layouts';
-import { isCovered, isFree, matchKey, newGame, tap, type MahjongState, type Tile } from './rules';
+import { freePairs, isCovered, isFree, matchKey, newGame, tap, type MahjongState, type Tile } from './rules';
 
 type RuleCase = {
   name: string;
@@ -39,6 +39,24 @@ function canWin(tiles: Tile[]): boolean {
 
 test.each(samples)('$layout sample $seed plays to a win through tap', (s) => {
   expect(canWin(s.tiles)).toBe(true);
+});
+
+// Depth-first search over the no-slots rule, played through the real tap.
+function canWinNoSlots(tiles: Tile[]): boolean {
+  const seen = new Set<string>();
+  const search = (s: MahjongState): boolean => {
+    if (s.status === 'won') return true;
+    if (s.status === 'lost') return false;
+    const key = s.onBoard.join(',');
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return freePairs(s).some(([a, b]) => search(tap(tap(s, a), b)));
+  };
+  return search(newGame(tiles, { noSlots: true }));
+}
+
+test.each(samples)('$layout sample $seed plays to a win without slots', (s) => {
+  expect(canWinNoSlots(s.tiles)).toBe(true);
 });
 
 test('canWin rejects a deal that cannot be won', () => {

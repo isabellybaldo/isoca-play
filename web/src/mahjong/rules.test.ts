@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'vitest';
 import {
   isCovered,
+  freePairs,
   isFree,
   matchKey,
   newGame,
@@ -303,5 +304,72 @@ describe('the match rule', () => {
     expect(back.slots).toEqual([0]);
     expect(back.onBoard).toEqual([1, 2, 3]);
     expect(undo(back).onBoard).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe('no slots', () => {
+  const start = (faces: string[]) => newGame(pairRow(faces), { noSlots: true });
+
+  test('slots games leave the field absent', () => {
+    expect('noSlots' in newGame(pairRow(['a', 'a']))).toBe(false);
+    expect(start(['a', 'a']).noSlots).toBe(true);
+  });
+
+  test('the first tap selects', () => {
+    expect(tap(start(['a', 'b', 'a']), 0).selected).toBe(0);
+  });
+
+  test('a free non-match moves the selection', () => {
+    const s = tap(tap(start(['a', 'b', 'a', 'b']), 0), 1);
+    expect(s.selected).toBe(1);
+    expect(s.onBoard).toEqual([0, 1, 2, 3]);
+    expect(s.history).toEqual([]);
+  });
+
+  test('tapping the selected tile again deselects without history', () => {
+    const s = tap(tap(start(['a', 'b', 'a']), 0), 0);
+    expect(s.selected).toBeNull();
+    expect(s.history).toEqual([]);
+    expect(s.onBoard).toEqual([0, 1, 2]);
+  });
+
+  test('a free match removes both, leaves slots empty, adds one history entry', () => {
+    const s0 = start(['a', 'b', 'a', 'b']);
+    const s = tap(tap(s0, 0), 2);
+    expect(s.onBoard).toEqual([1, 3]);
+    expect(s.slots).toEqual([]);
+    expect(s.selected).toBeNull();
+    expect(s.history).toEqual([{ onBoard: [0, 1, 2, 3], slots: [] }]);
+    expect(s.status).toBe('playing');
+  });
+
+  test('a season pairs with a different season', () => {
+    const s = tap(tap(start(['spring', 'winter', 'cat', 'cat']), 0), 1);
+    expect(s.onBoard).toEqual([2, 3]);
+  });
+
+  test('clearing the board wins', () => {
+    expect(tap(tap(start(['a', 'a']), 0), 1).status).toBe('won');
+  });
+
+  test('a removal leaving tiles but no free pair loses, and undo restores both', () => {
+    const s0 = start(['a', 'a', 'b', 'c']);
+    const lost = tap(tap(s0, 0), 1);
+    expect(lost.onBoard).toEqual([2, 3]);
+    expect(freePairs(lost)).toEqual([]);
+    expect(lost.status).toBe('lost');
+    const back = undo(lost);
+    expect(back.status).toBe('playing');
+    expect(back.onBoard).toEqual([0, 1, 2, 3]);
+  });
+
+  test('freePairs lists free matching pairs in onBoard order', () => {
+    const s = start(['a', 'b', 'a', 'b', 'c']);
+    expect(freePairs(s)).toEqual([[0, 2], [1, 3]]);
+  });
+
+  test('freePairs skips covered tiles', () => {
+    const s = newGame([t(0, 0, 0, 0, 'a'), t(1, 0, 0, 1, 'b'), t(2, 8, 0, 0, 'a')], { noSlots: true });
+    expect(freePairs(s)).toEqual([]);
   });
 });

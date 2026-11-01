@@ -23,6 +23,7 @@ beforeEach(() => {
   server = fakeServer();
   vi.mocked(goToLogin).mockClear();
   sessionStorage.clear();
+  localStorage.clear();
 });
 
 afterEach(() => {
@@ -132,6 +133,49 @@ describe('back keeps the game', () => {
     expect(screen.getByRole('button', { name: 'Medium' }).getAttribute('aria-pressed')).toBe('true');
   });
 
+  test('Slots off starts a no-slots game, is remembered, and Resume says so', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    expect(screen.getByRole('button', { name: 'Slots' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Slots' }));
+    expect(localStorage.getItem('isoca-play-mahjong-slots')).toBe('off');
+    await user.click(screen.getByRole('button', { name: /^Frame/ }));
+    await screen.findByRole('group', { name: 'Board' });
+    expect(screen.queryByRole('list', { name: 'Slots' })).toBeNull();
+    await user.dblClick(freeTiles()[0]);
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }));
+    expect(screen.getByRole('button', { name: /^Resume Frame, no slots, \d+ moves?$/ })).toBeTruthy();
+    // The switch only affects the next start.
+    await user.click(screen.getByRole('button', { name: 'Slots' }));
+    await user.click(screen.getByRole('button', { name: /^Resume Frame, no slots/ }));
+    expect(screen.queryByRole('list', { name: 'Slots' })).toBeNull();
+  });
+
+  test('the Slots choice survives a remount, and a broken store falls back to on', async () => {
+    const user = userEvent.setup();
+    const first = await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    await user.click(screen.getByRole('button', { name: 'Slots' }));
+    first.unmount();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    expect(screen.getByRole('button', { name: 'Slots' }).getAttribute('aria-pressed')).toBe('false');
+    cleanup();
+
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    expect(screen.getByRole('button', { name: 'Slots' }).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button', { name: 'Slots' }));
+    expect(screen.getByRole('button', { name: 'Slots' }).getAttribute('aria-pressed')).toBe('false');
+  });
+
   test('mahjong: another shape asks before dropping a game with moves', async () => {
     const user = userEvent.setup();
     await open();
@@ -143,7 +187,18 @@ describe('back keeps the game', () => {
 
     await user.click(screen.getByRole('button', { name: /^Frame/ }));
     await user.click(screen.getByRole('button', { name: 'Keep playing' }));
-    expect(screen.getByRole('button', { name: 'Resume Frame, 1 move' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Board' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }));
+
+    // Looking at another level, a shape there asks too, and Keep playing leads back to the held game's level.
+    const held = screen.getByRole('button', { name: 'Resume Frame, 1 move' });
+    expect(held).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Hard' }));
+    await user.click(screen.getByRole('button', { name: /^Fort/ }));
+    await user.click(screen.getByRole('button', { name: 'Keep playing' }));
+    expect(screen.getByRole('group', { name: 'Board' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }));
+    expect(screen.getByRole('button', { name: 'Hard' }).getAttribute('aria-pressed')).toBe('false');
 
     await user.click(screen.getByRole('button', { name: /^Frame/ }));
     await user.click(screen.getByRole('button', { name: 'Start new game' }));
@@ -194,7 +249,7 @@ describe('back keeps the game', () => {
 
     await user.click(screen.getByRole('button', { name: 'Medium' }));
     await user.click(screen.getByRole('button', { name: 'Keep playing' }));
-    await user.click(screen.getByRole('button', { name: 'Resume Easy, 1 move' }));
+    expect(screen.getByRole('group', { name: 'Board' })).toBeTruthy();
     expect(look()).not.toEqual(held);
 
     await user.click(screen.getByRole('button', { name: 'Back to levels' }));

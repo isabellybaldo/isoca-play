@@ -50,6 +50,15 @@ describe.each(LAYOUTS)('$id on the board', (l: Layout) => {
 });
 
 describe('choosing the size', () => {
+  test('without the slots row the height has 62 px less to find', () => {
+    const board = tall(9);
+    const need = boardBox(board, 54).height + GAME_CHROME;
+    expect(tileWidth(board, 2000, need - 62)).toBe(36);
+    expect(tileWidth(board, 2000, need - 62, { noSlots: true })).toBe(54);
+    expect(tileWidth(board, 2000, need - 63, { noSlots: true })).toBe(36);
+    expect(tileWidth(board, 2000, need - 62, { noSlots: false })).toBe(36);
+  });
+
   test('54 needs the width of the whole board', () => {
     expect(tileWidth(wide(8), 463, 2000)).toBe(36); // 432 + 32 = 464
     expect(tileWidth(wide(8), 464, 2000)).toBe(54);

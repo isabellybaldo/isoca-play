@@ -140,8 +140,8 @@ def test_server_header_is_off(http):
 LEFT_OUT = """
 import importlib.util, os
 names = {'.git', 'rustoku', 'make_sudoku_pack.py', 'sudoku_grader.py', 'write_deal_samples.py',
-         'deal-samples.json', 'rule-cases.json', 'conftest.py', 'Dockerfile', 'pyproject.toml',
-         'requirements.txt', 'package-lock.json', 'node_modules'}
+         'deal-samples.json', 'rule-cases.json', 'tip-cases.json', 'make_tip_cases.py', 'conftest.py',
+         'Dockerfile', 'pyproject.toml', 'requirements.txt', 'package-lock.json', 'node_modules'}
 found = []
 for top, dirs, files in os.walk('/'):
     if top in ('/proc', '/sys', '/dev'):

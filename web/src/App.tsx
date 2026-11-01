@@ -20,6 +20,7 @@ import MahjongSetup from './mahjong/MahjongSetup';
 import { hasMovesToLose, newGame, type MahjongState } from './mahjong/rules';
 import { clearDevice } from './offline';
 import ResumeButton from './ResumeButton';
+import { useSlotsSetting } from './mahjong/slotsSetting';
 import SaveMarker from './SaveMarker';
 import SudokuGame from './sudoku/SudokuGame';
 import { useOnline, useSavedGame, type MahjongSave } from './useSavedGame';
@@ -49,6 +50,7 @@ function Mahjong({
   const [replacing, setReplacing] = useState<Layout | null>(null);
   const [starting, setStarting] = useState(false);
   const [problem, setProblem] = useState('');
+  const [slots, setSlots] = useSlotsSetting();
   const layout = game && LAYOUTS.find((l) => l.id === game.layout)!;
 
   if (playing && game && layout) {
@@ -74,7 +76,7 @@ function Mahjong({
     setProblem('');
     try {
       const deal = await newMahjong(chosen.id);
-      onGame({ layout: chosen.id, state: newGame(deal.tiles) });
+      onGame({ layout: chosen.id, state: newGame(deal.tiles, slots ? undefined : { noSlots: true }) });
       setPlaying(true);
     } catch (error) {
       setProblem(newGameProblem(error));
@@ -94,11 +96,14 @@ function Mahjong({
         inert={replacing !== null}
         disabled={!online || !ready || starting}
         note={startNote({ online, ready, starting, problem, unplayable })}
+        slots={slots}
+        onSlots={setSlots}
         resume={
           game &&
           layout && (
             <ResumeButton
               name={layout.name}
+              noSlots={game.state.noSlots}
               moves={game.state.history.length}
               onResume={() => {
                 onLevel(layout.level);
@@ -114,7 +119,13 @@ function Mahjong({
           line={unplayable ? REPLACE_UNPLAYABLE : "This game's moves will be lost."}
           keepLabel="Keep playing"
           confirmLabel="Start new game"
-          onKeep={() => setReplacing(null)}
+          onKeep={() => {
+            setReplacing(null);
+            if (game && layout) {
+              onLevel(layout.level);
+              setPlaying(true);
+            }
+          }}
           onConfirm={() => {
             void start(replacing);
             setReplacing(null);

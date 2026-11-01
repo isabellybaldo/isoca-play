@@ -54,7 +54,7 @@
 
 .mj-types {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); /* four cards a level: two rows, never wider than the phone */
   gap: 16px;
   margin: 16px 0;
   padding-right: 5px;
@@ -70,8 +70,8 @@
   box-shadow: 5px 5px 0 var(--line);
 }
 .mj-type:active { transform: translate(5px, 5px); box-shadow: none; }
-.mj-shape { display: block; width: 100%; max-width: 104px; height: auto; margin-bottom: 8px; }
-.mj-type-name { font-family: var(--px); font-size: 11px; line-height: 1.4; }
+.mj-shape { display: block; width: 100%; max-width: 104px; max-height: 104px; height: auto; margin-bottom: 8px; }
+.mj-type-name { font-family: var(--px); font-size: 11px; line-height: 1.4; max-width: 100%; overflow-wrap: anywhere; }
 .mj-type-count { font-family: var(--big); font-size: 20px; line-height: 1; color: var(--dim); }
 
 /* Game: every row is sized so the tallest board still fits a 320x568 phone.
@@ -86,6 +86,9 @@
 
 .mj-bar { display: flex; align-items: center; justify-content: space-between; padding-right: 3px; }
 .mj-moves { font-family: var(--big); font-size: 24px; line-height: 1; }
+
+.mj-options { display: flex; align-items: center; gap: 12px; }
+.mj-slots-switch { flex: none; }
 
 .mj-slots { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .mj-slots-name { font-family: var(--big); font-size: 22px; line-height: 1; color: var(--dim); }
@@ -128,6 +131,12 @@
   transform: translate(-1px, -2px);
   pointer-events: none;
 }
+
+/* Tip: a dashed pink frame on the tiles it names, nothing written. The line wraps inside the phone width. */
+.mj-board > .tile.is-tip { outline: 3px dashed var(--accent); outline-offset: -3px; }
+.mj-tip { text-align: center; line-height: 1.7; padding: 2px 4px; overflow-wrap: anywhere; }
+.mj-tip.is-empty { display: none; }
+.mj-tipbtns { display: flex; justify-content: center; gap: 8px; }
 
 .mj-actions { display: flex; justify-content: space-between; padding-right: 3px; }
 

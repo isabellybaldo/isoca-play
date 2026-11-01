@@ -12,6 +12,7 @@ ORIGIN = {"Origin": BASE_URL}
 TOOLS = Path(__file__).resolve().parents[2] / "tools"
 sys.path.insert(0, str(TOOLS))
 
+import make_tip_cases  # noqa: E402  (plain Python, from the repo's tools/)
 import sudoku_grader as grader  # noqa: E402  (plain Python, from the repo's tools/)
 
 ALL = 0x1FF
@@ -359,3 +360,14 @@ def test_a_body_naming_no_level_is_400(client, sign_in, body):
 def test_a_huge_body_is_413(client, sign_in):
     sign_in(client)
     assert post(client, content=b"x" * (512 * 1024 + 1)).status_code == 413
+
+
+def test_the_tip_cases_file_is_what_the_generator_writes():
+    cases = json.loads((TOOLS.parent / "shared" / "tip-cases.json").read_text(encoding="utf-8"))
+    assert len(cases) == sum(len(puzzles) for puzzles in PACK.values())
+    # The file's order is the pack's. Five boards, spread through it, keep it from going stale.
+    pack = [p for level in LEVELS for p in PACK[level]]
+    for case, puzzle in zip(cases, pack):
+        assert (case["givens"], case["solution"]) == (puzzle["givens"], puzzle["solution"])
+    for case in cases[::180]:
+        assert make_tip_cases.board_tips(case["givens"]) == (case["tips"], case["solution"])
