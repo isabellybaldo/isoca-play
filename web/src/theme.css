@@ -173,3 +173,5 @@ button {
   border: 1px solid var(--line2);
 }
 .save-marker a { color: var(--accent); pointer-events: auto; }
+
+.boundary-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }

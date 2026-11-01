@@ -34,13 +34,15 @@ export default function Home({
   onOpen,
   onLogOut,
   note,
+  inert,
 }: {
   onOpen: (screen: Screen) => void;
   onLogOut: () => void;
   note: string;
+  inert?: boolean;
 }) {
   return (
-    <main className="shell">
+    <main className="shell" inert={inert}>
       <h1 className="home-title">isoca play</h1>
       <div className="games">
         <button type="button" className="game" onClick={() => onOpen('mahjong')}>

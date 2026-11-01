@@ -26,6 +26,26 @@ const json = (body: unknown, status = 200) =>
 
 export type Seen = { method: string; path: string; body?: unknown };
 
+// BroadcastChannel between tabs in one test: delivered to the others, soon after, as a
+// browser does.
+const open = new Set<FakeChannel>();
+class FakeChannel {
+  onmessage: ((event: MessageEvent) => void) | null = null;
+  constructor(private name: string) {
+    open.add(this);
+  }
+  postMessage(data: unknown) {
+    for (const other of open) {
+      if (other !== this && other.name === this.name) {
+        queueMicrotask(() => other.onmessage?.({ data } as MessageEvent));
+      }
+    }
+  }
+  close() {
+    open.delete(this);
+  }
+}
+
 // The server's routes as the app sees them, stubbed in for fetch. `answer` overrides a
 // request: return a status to refuse it, or throw for a network failure.
 export function fakeServer(saves: Record<string, unknown> = {}) {
@@ -33,14 +53,18 @@ export function fakeServer(saves: Record<string, unknown> = {}) {
     saves,
     requests: [] as Seen[],
     answer: null as null | ((seen: Seen) => number | undefined),
+    gate: null as null | Promise<unknown>, // a request waits here before it is answered
     puts: (game: string) =>
       server.requests.filter((r) => r.method === 'PUT' && r.path === `/api/save/${game}`).map((r) => r.body),
   };
+  open.clear();
+  vi.stubGlobal('BroadcastChannel', FakeChannel);
   vi.stubGlobal('fetch', async (path: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
     const body = typeof init.body === 'string' ? JSON.parse(init.body) : undefined;
     const seen: Seen = { method, path, body };
     server.requests.push(seen);
+    if (server.gate) await server.gate;
     const refused = server.answer?.(seen);
     if (refused !== undefined) return json({ detail: 'refused' }, refused);
 

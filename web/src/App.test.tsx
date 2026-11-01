@@ -294,6 +294,7 @@ describe('the server', () => {
     server.answer = ({ method }) => (method === 'PUT' ? 401 : undefined);
     const square = within(board).getAllByRole('button', { name: /empty$/ })[0];
     await user.click(square);
+    await user.click(within(screen.getByRole('group', { name: 'Numbers' })).getByRole('button', { name: '5' }));
     await settle();
     const link = screen.getByRole('link', { name: 'Log in' });
     expect(link.getAttribute('href')).toBe('/login');
@@ -313,6 +314,7 @@ describe('the server', () => {
 
     server.answer = ({ method }) => (method === 'PUT' ? 503 : undefined);
     await user.click(within(screen.getByRole('group', { name: 'Board' })).getAllByRole('button', { name: /empty$/ })[0]);
+    await user.click(within(screen.getByRole('group', { name: 'Numbers' })).getByRole('button', { name: '5' }));
     await settle();
     const said = container.querySelector('.save-marker')!.textContent!;
     expect(said).toMatch(/not saved/i);
@@ -370,6 +372,7 @@ describe('the server', () => {
     await open();
     await user.click(screen.getByRole('button', { name: /Mahjong/ }));
     expect((screen.getByRole('button', { name: /^Frame/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('Loading your saved game.')).toBeTruthy();
     await user.click(screen.getByRole('button', { name: 'Back to home' }));
     await user.click(screen.getByRole('button', { name: /Sudoku/ }));
     expect((screen.getByRole('button', { name: 'Easy' }) as HTMLButtonElement).disabled).toBe(true);
@@ -397,6 +400,64 @@ describe('the server', () => {
     const paths = server.requests.map((r) => `${r.method} ${r.path}`);
     expect(paths).toContain('POST /logout');
     expect(paths.lastIndexOf('PUT /api/save/sudoku')).toBeLessThan(paths.indexOf('POST /logout'));
+  });
+
+  test('log out with a move not sent asks one confirming tap', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    server.answer = ({ method }) => (method === 'PUT' ? 413 : undefined);
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await settle();
+    await user.click(screen.getByRole('button', { name: 'Back to levels' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    const dialog = await screen.findByRole('alertdialog');
+    expect(server.requests.some((r) => r.path === '/logout')).toBe(false);
+    await user.click(within(dialog).getByRole('button', { name: 'Stay' }));
+    expect(goToLogin).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await user.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Log out' }));
+    await settle();
+    expect(server.requests.at(-1)).toMatchObject({ method: 'POST', path: '/logout' });
+    expect(goToLogin).toHaveBeenCalledOnce();
+  });
+
+  test('a permanent refusal has its own marker', async () => {
+    const user = userEvent.setup();
+    const { container } = await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    server.answer = ({ method }) => (method === 'PUT' ? 413 : undefined);
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await settle();
+    expect(container.querySelector('.save-marker')!.textContent).toBe('Not saved: the server refused this.');
+  });
+
+  test.each([
+    ['sudoku', 'Sudoku', 'Easy'],
+    ['mahjong', 'Mahjong', 'Random'],
+  ])('a %s save that cannot be opened is not resumed, says so, and asks before it is replaced', async (game, card, start) => {
+    const user = userEvent.setup();
+    server.saves[game] = { puzzle: { givens: 'x', solution: 'y' }, values: [], notes: [], history: [] };
+    await open();
+    await user.click(screen.getByRole('button', { name: new RegExp(card) }));
+    expect(screen.queryByRole('button', { name: /^Resume/ })).toBeNull();
+    expect(screen.getByText('The saved game could not be opened.')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: start }));
+    const dialog = screen.getByRole('alertdialog');
+    expect(dialog.textContent).toContain('could not be opened');
+    expect(server.puts(game)).toEqual([]);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Start new game' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await settle();
+    expect(server.puts(game)).toHaveLength(1);
+    expect(screen.queryByText('The saved game could not be opened.')).toBeNull();
   });
 
   test('log out offline says it cannot, and stays', async () => {

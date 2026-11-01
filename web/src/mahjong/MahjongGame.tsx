@@ -1,5 +1,5 @@
 import { useEffect, useState, type MouseEvent } from 'react';
-import { newGameProblem, newMahjong, OFFLINE_NOTE } from '../api';
+import { newGameProblem, newMahjong, startNote } from '../api';
 import ConfirmDialog from '../ConfirmDialog';
 import { boardBox, tileHeight, tilePosition, tileWidth } from './boardSize';
 import type { Layout } from './layouts';
@@ -151,7 +151,7 @@ export default function MahjongGame({
       setStarting(false);
     }
   };
-  const note = online ? problem : OFFLINE_NOTE;
+  const note = startNote({ online, starting, problem });
   const width = tileWidth(layout, viewport.width, viewport.height);
   const box = boardBox(layout, width);
   // Lower layers first, and each row left to right, so upper tiles lie on top.

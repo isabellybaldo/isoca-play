@@ -1,7 +1,9 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { blanked, fakeServer, goOffline } from './fakeServer.testutil';
-import { newSudoku } from './sudoku/rules';
+import { LAYOUTS } from './mahjong/layouts';
+import { isFree, newGame, tap, tapElsewhere } from './mahjong/rules';
+import { newSudoku, pressDigit, selectCell, setMode } from './sudoku/rules';
 import { useSavedGame } from './useSavedGame';
 
 const P = blanked('easy', [0, 1, 2]);
@@ -172,13 +174,259 @@ test('a save never overwrites a game that has not finished loading', async () =>
   expect(server.saves.sudoku).toEqual(game(9));
 });
 
+const SUDOKU_OK = game(0);
+test.each([
+  ['the short shape', { puzzle: { givens: P.givens, solution: P.solution }, values: SUDOKU_OK.values, notes: SUDOKU_OK.notes, history: [] }],
+  ['an unknown level', { ...SUDOKU_OK, puzzle: { ...P, level: 'brutal' } }],
+  ['short givens', { ...SUDOKU_OK, puzzle: { ...P, givens: '1.' } }],
+  ['short solution', { ...SUDOKU_OK, puzzle: { ...P, solution: '1' } }],
+  ['short values', { ...SUDOKU_OK, values: [1, 2] }],
+  ['short notes', { ...SUDOKU_OK, notes: [0] }],
+  ['history not a list', { ...SUDOKU_OK, history: 'x' }],
+  ['an unknown status', { ...SUDOKU_OK, status: 'maybe' }],
+  ['an unknown mode', { ...SUDOKU_OK, mode: 'pen' }],
+])('a sudoku save with %s cannot be opened', async (_name, body) => {
+  const server = fakeServer({ sudoku: body });
+  const { result } = await opened();
+  expect(result.current.state).toBeNull();
+  expect(result.current.unplayable).toBe(true);
+  expect(result.current.ready).toBe(true);
+  expect(server.puts('sudoku')).toEqual([]);
+});
+
+const FRAME = LAYOUTS[0];
+const DEALT = newGame(FRAME.cells.map((c, id) => ({ id, ...c, face: 'cat' })));
+test.each([
+  ['an unknown layout', { layout: 'nope', state: DEALT }],
+  ['tiles that are not tiles', { layout: FRAME.id, state: { ...DEALT, tiles: [1, 2] } }],
+  ['a tile with no face', { layout: FRAME.id, state: { ...DEALT, tiles: [{ id: 0, x: 0, y: 0, z: 0 }] } }],
+  ['no board', { layout: FRAME.id, state: { ...DEALT, onBoard: null } }],
+  ['no slots', { layout: FRAME.id, state: { ...DEALT, slots: 'x' } }],
+  ['a slot holding no tile', { layout: FRAME.id, state: { ...DEALT, slots: [9999] } }],
+  ['no history', { layout: FRAME.id, state: { ...DEALT, history: {} } }],
+])('a mahjong save with %s cannot be opened', async (_name, body) => {
+  fakeServer({ mahjong: body });
+  const { result } = renderHook(() => useSavedGame('mahjong'));
+  await pass();
+  expect(result.current.state).toBeNull();
+  expect(result.current.unplayable).toBe(true);
+});
+
+test('a good save is playable, and no save is not a bad one', async () => {
+  fakeServer({ sudoku: SUDOKU_OK, mahjong: { layout: FRAME.id, state: DEALT } });
+  const sudoku = await opened();
+  expect(sudoku.result.current.unplayable).toBe(false);
+  expect(sudoku.result.current.state).toEqual(SUDOKU_OK);
+  const mahjong = renderHook(() => useSavedGame('mahjong'));
+  await pass();
+  expect(mahjong.result.current.unplayable).toBe(false);
+  cleanup();
+  fakeServer();
+  const none = await opened();
+  expect(none.result.current.unplayable).toBe(false);
+});
+
+test('a selection or a change of mode is not a move, and sends nothing', async () => {
+  const server = fakeServer({ sudoku: SUDOKU_OK });
+  const { result } = await opened();
+  act(() => result.current.setState((s) => selectCell(s!, 0)));
+  act(() => result.current.setState((s) => setMode(s!, 'notes')));
+  await pass();
+  expect(result.current.state!.selected).toBe(0);
+  expect(result.current.state!.mode).toBe('notes');
+  expect(server.puts('sudoku')).toEqual([]);
+
+  act(() => result.current.setState((s) => pressDigit(s!, 3)));
+  await pass();
+  expect(server.puts('sudoku')).toHaveLength(1);
+});
+
+test('a mahjong selection sends nothing; the move does', async () => {
+  const server = fakeServer({ mahjong: { layout: FRAME.id, state: DEALT } });
+  const { result } = renderHook(() => useSavedGame('mahjong'));
+  await pass();
+  const change = (f: typeof tapElsewhere) =>
+    act(() => result.current.setState((g) => ({ ...g!, state: f(g!.state) })));
+  const id = DEALT.tiles.find((t) => isFree(DEALT, t.id))!.id;
+  change((s) => tap(s, id));
+  await pass();
+  change(tapElsewhere);
+  await pass();
+  change((s) => tap(s, id));
+  await pass();
+  expect(server.puts('mahjong')).toEqual([]);
+  change((s) => tap(s, id));
+  await pass();
+  expect(server.puts('mahjong')).toHaveLength(1);
+});
+
+const wake = {
+  focus: () => window.dispatchEvent(new Event('focus')),
+  online: () => window.dispatchEvent(new Event('online')),
+  visible: () => document.dispatchEvent(new Event('visibilitychange')),
+};
+
+test.each(Object.entries(wake))('waking by %s fetches and takes newer moves', async (_name, fire) => {
+  const server = fakeServer({ sudoku: game(1) });
+  const { result } = await opened();
+  server.saves.sudoku = game(2);
+  fire();
+  await pass();
+  expect(result.current.state).toEqual(game(2));
+  expect(server.puts('sudoku')).toEqual([]);
+});
+
+test('waking with nothing new keeps the selection', async () => {
+  fakeServer({ sudoku: SUDOKU_OK });
+  const { result } = await opened();
+  act(() => result.current.setState((s) => selectCell(s!, 40)));
+  wake.focus();
+  await pass();
+  expect(result.current.state!.selected).toBe(40);
+});
+
+test('waking with unsent moves stores them over newer ones: last save wins', async () => {
+  const server = fakeServer({ sudoku: game(1) });
+  const { result } = await opened();
+  server.answer = () => 503;
+  act(() => result.current.setState(game(5)));
+  await pass();
+  server.answer = null;
+  server.saves.sudoku = game(9);
+  wake.online();
+  await pass();
+  expect(server.saves.sudoku).toEqual(game(5));
+  expect(result.current.state).toEqual(game(5));
+});
+
+test('a move during the check waits, and is dropped if the server had newer ones', async () => {
+  const server = fakeServer({ sudoku: game(1) });
+  const { result } = await opened();
+  let open = () => {};
+  server.gate = new Promise<void>((resolve) => (open = resolve));
+  server.saves.sudoku = game(2);
+  wake.focus();
+  await pass();
+  act(() => result.current.setState(game(7)));
+  await pass();
+  expect(result.current.state).toEqual(game(1));
+  expect(server.puts('sudoku')).toEqual([]);
+
+  server.gate = null;
+  open();
+  await pass();
+  expect(result.current.state).toEqual(game(2));
+  expect(server.puts('sudoku')).toEqual([]);
+});
+
+test('a move during the check goes ahead if the server had nothing newer', async () => {
+  const server = fakeServer({ sudoku: game(1) });
+  const { result } = await opened();
+  let open = () => {};
+  server.gate = new Promise<void>((resolve) => (open = resolve));
+  wake.focus();
+  await pass();
+  act(() => result.current.setState(game(7)));
+  server.gate = null;
+  open();
+  await pass();
+  expect(result.current.state).toEqual(game(7));
+  expect(server.saves.sudoku).toEqual(game(7));
+});
+
+test('a slow check says so after a second, and clears', async () => {
+  const server = fakeServer({ sudoku: game(1) });
+  const { result } = await opened();
+  let open = () => {};
+  server.gate = new Promise<void>((resolve) => (open = resolve));
+  wake.focus();
+  await pass(900);
+  expect(result.current.checking).toBe(false);
+  await pass(200);
+  expect(result.current.checking).toBe(true);
+  server.gate = null;
+  open();
+  await pass();
+  expect(result.current.checking).toBe(false);
+});
+
+test('a check with no answer leaves the game as it is, and moves go on', async () => {
+  const server = fakeServer({ sudoku: game(1) });
+  const { result } = await opened();
+  server.answer = () => 503;
+  wake.focus();
+  await pass();
+  expect(result.current.state).toEqual(game(1));
+  server.answer = null;
+  act(() => result.current.setState(game(2)));
+  await pass();
+  expect(server.saves.sudoku).toEqual(game(2));
+});
+
+test.each([400, 403, 413])('a %i stops retrying and says so; the next move tries again', async (status) => {
+  const server = fakeServer();
+  const { result } = await opened();
+  server.answer = () => status;
+  act(() => result.current.setState(game(1)));
+  await pass();
+  expect(result.current.refused).toBe(true);
+  expect(result.current.saving).toBe('saved');
+  await pass(120_000);
+  wake.focus();
+  await pass();
+  expect(server.puts('sudoku')).toHaveLength(1);
+  expect(server.requests.filter((r) => r.method === 'GET')).toHaveLength(1);
+
+  server.answer = null;
+  act(() => result.current.setState(game(2)));
+  await pass();
+  expect(server.saves.sudoku).toEqual(game(2));
+  expect(result.current.refused).toBe(false);
+});
+
+test('the login tab: the waiting tab saves as soon as it loads, and it then takes that save', async () => {
+  const server = fakeServer({ sudoku: game(1) });
+  const waiting = await opened();
+  server.answer = () => 401;
+  act(() => waiting.result.current.setState(game(2)));
+  await pass();
+  expect(waiting.result.current.signedOut).toBe(true);
+
+  // Logged in, in another tab: well inside the waiting tab's backoff.
+  server.answer = null;
+  server.requests.length = 0;
+  const loginTab = renderHook(() => useSavedGame('sudoku'));
+  await pass();
+
+  expect(server.requests.map((r) => `${r.method} ${r.path}`)).toEqual([
+    'GET /api/save/sudoku', // the new tab loads, still the old game
+    'PUT /api/save/sudoku', // which wakes the waiting tab
+    'GET /api/save/sudoku', // whose save the new tab then takes
+  ]);
+  expect(waiting.result.current.signedOut).toBe(false);
+  expect(loginTab.result.current.state).toEqual(game(2));
+  expect(server.puts('sudoku')).toEqual([game(2)]);
+});
+
+test('a move in one tab reaches the other', async () => {
+  const server = fakeServer({ sudoku: game(1) });
+  const one = await opened();
+  const two = await opened();
+  act(() => one.result.current.setState(game(2)));
+  await pass();
+  expect(two.result.current.state).toEqual(game(2));
+  expect(server.puts('sudoku')).toEqual([game(2)]);
+});
+
 test('flush waits for what is still going out', async () => {
   const server = fakeServer();
   const { result } = await opened();
   act(() => result.current.setState(game(1)));
+  let sent;
   await act(async () => {
-    await result.current.flush();
+    sent = await result.current.flush();
   });
+  expect(sent).toBe(true);
   expect(server.saves.sudoku).toEqual(game(1));
 });
 
@@ -187,12 +435,21 @@ test('flush gives up after its time limit', async () => {
   const { result } = await opened();
   server.answer = () => 503;
   act(() => result.current.setState(game(1)));
-  let done = false;
-  void result.current.flush(3000).then(() => {
-    done = true;
+  let sent: boolean | undefined;
+  void result.current.flush(3000).then((answer) => {
+    sent = answer;
   });
   await pass(2900);
-  expect(done).toBe(false);
+  expect(sent).toBeUndefined();
   await pass(200);
-  expect(done).toBe(true);
+  expect(sent).toBe(false);
+});
+
+test('flush says no at once when the server has refused the save', async () => {
+  const server = fakeServer();
+  const { result } = await opened();
+  server.answer = () => 413;
+  act(() => result.current.setState(game(1)));
+  await pass();
+  await expect(result.current.flush()).resolves.toBe(false);
 });

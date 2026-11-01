@@ -120,3 +120,33 @@ def test_a_missing_build_is_a_404_not_a_crash(client, sign_in):
     assert client.get("/").status_code == 404
     assert client.get("/assets/x.js").status_code == 404
     assert client.get("/healthz").status_code == 200
+
+
+# State changes on the static paths: the guard answers first, then the mount refuses.
+
+FOREIGN = {"Origin": "https://evil.example"}
+OWN = {"Origin": BASE_URL}
+STATE_CHANGES = [(m, p) for m in ("PUT", "POST") for p in ("/assets/x", "/")]
+
+
+@pytest.mark.parametrize("method, path", STATE_CHANGES)
+def test_a_foreign_origin_is_refused_signed_in_or_out(client, sign_in, built, method, path):
+    assert client.request(method, path, headers=FOREIGN).status_code == 403
+    sign_in(client)
+    assert client.request(method, path, headers=FOREIGN).status_code == 403
+
+
+@pytest.mark.parametrize("method, path", STATE_CHANGES)
+def test_signed_in_with_our_origin_the_mount_takes_no_writes(signed_in, method, path):
+    assert signed_in.request(method, path, headers=OWN).status_code == 405
+
+
+@pytest.mark.parametrize("method, path", STATE_CHANGES)
+def test_signed_out_with_our_origin_goes_to_login(client, built, method, path):
+    r = client.request(method, path, headers=OWN, follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/login"
+
+
+@pytest.mark.parametrize("method", ["PUT", "POST"])
+def test_signed_out_under_api_is_a_401(client, method):
+    assert client.request(method, "/api/x", headers=OWN).status_code == 401

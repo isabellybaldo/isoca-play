@@ -1,5 +1,5 @@
 import { useState, type SetStateAction } from 'react';
-import { newGameProblem, newSudoku as askForPuzzle, OFFLINE_NOTE } from '../api';
+import { newGameProblem, newSudoku as askForPuzzle, REPLACE_UNPLAYABLE, startNote } from '../api';
 import ConfirmDialog from '../ConfirmDialog';
 import type { Level } from '../mahjong/layouts';
 import ResumeButton from '../ResumeButton';
@@ -94,7 +94,7 @@ function Game({
       setStarting(false);
     }
   };
-  const startNote = online ? problem : OFFLINE_NOTE;
+  const note = startNote({ online, starting, problem });
   const name = LEVELS.find((l) => l.id === level)!.name;
 
   return (
@@ -162,7 +162,7 @@ function Game({
             </button>
           ))}
         </div>
-        {startNote && <p className="start-note" aria-live="polite">{startNote}</p>}
+        {note && <p className="start-note" aria-live="polite">{note}</p>}
       </main>
 
       {asking && (
@@ -187,12 +187,14 @@ export default function SudokuGame({
   onGame,
   ready = true,
   online = true,
+  unplayable = false,
   onBack,
 }: {
   game: SudokuState | null;
   onGame: (action: SetStateAction<SudokuState | null>) => void;
   ready?: boolean;
   online?: boolean;
+  unplayable?: boolean;
   onBack: () => void;
 }) {
   const [playing, setPlaying] = useState(false);
@@ -223,7 +225,7 @@ export default function SudokuGame({
       setStarting(false);
     }
   };
-  const note = online ? problem : OFFLINE_NOTE;
+  const note = startNote({ online, ready, starting, problem, unplayable });
   return (
     <>
       <main className="shell sd-setup" inert={replacing !== null}>
@@ -244,7 +246,7 @@ export default function SudokuGame({
               className="sd-levelbtn"
               aria-label={l.name}
               disabled={!online || !ready || starting}
-              onClick={() => (game && hasMovesToLose(game) ? setReplacing(l.id) : void start(l.id))}
+              onClick={() => (unplayable || (game && hasMovesToLose(game)) ? setReplacing(l.id) : void start(l.id))}
             >
               <span className="sd-levelname">{l.name}</span>
               <span className="sd-levelline">{l.line}</span>
@@ -258,7 +260,7 @@ export default function SudokuGame({
       {replacing && (
         <ConfirmDialog
           title="Start a new game?"
-          line="This game will be lost."
+          line={unplayable ? REPLACE_UNPLAYABLE : 'This game will be lost.'}
           keepLabel="Keep playing"
           confirmLabel="Start new game"
           onKeep={() => setReplacing(null)}

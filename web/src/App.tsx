@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { goToLogin, logout, newGameProblem, newMahjong, OFFLINE_NOTE } from './api';
+import { goToLogin, logout, newGameProblem, newMahjong, REPLACE_UNPLAYABLE, startNote } from './api';
 import ConfirmDialog from './ConfirmDialog';
+import GameBoundary from './GameBoundary';
 import Home from './Home';
 import { LAYOUTS, type Layout, type Level } from './mahjong/layouts';
 import MahjongGame from './mahjong/MahjongGame';
@@ -20,6 +21,7 @@ function Mahjong({
   onGame,
   ready,
   online,
+  unplayable,
   onHome,
 }: {
   level: Level;
@@ -28,6 +30,7 @@ function Mahjong({
   onGame: (update: MahjongSave | ((g: MahjongSave | null) => MahjongSave | null)) => void;
   ready: boolean;
   online: boolean;
+  unplayable: boolean;
   onHome: () => void;
 }) {
   const [playing, setPlaying] = useState(false);
@@ -72,11 +75,13 @@ function Mahjong({
       <MahjongSetup
         level={level}
         onLevel={onLevel}
-        onStart={(chosen) => (game && hasMovesToLose(game.state) ? setReplacing(chosen) : void start(chosen))}
+        onStart={(chosen) =>
+          unplayable || (game && hasMovesToLose(game.state)) ? setReplacing(chosen) : void start(chosen)
+        }
         onBack={onHome}
         inert={replacing !== null}
         disabled={!online || !ready || starting}
-        note={online ? problem : OFFLINE_NOTE}
+        note={startNote({ online, ready, starting, problem, unplayable })}
         resume={
           game &&
           layout && (
@@ -94,7 +99,7 @@ function Mahjong({
       {replacing && (
         <ConfirmDialog
           title="Start a new game?"
-          line="This game's moves will be lost."
+          line={unplayable ? REPLACE_UNPLAYABLE : "This game's moves will be lost."}
           keepLabel="Keep playing"
           confirmLabel="Start new game"
           onKeep={() => setReplacing(null)}
@@ -117,6 +122,7 @@ export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const [mahjongLevel, setMahjongLevel] = useState<Level>('easy');
   const [logoutNote, setLogoutNote] = useState('');
+  const [askingLogout, setAskingLogout] = useState(false);
   const mahjong = useSavedGame('mahjong');
   const sudoku = useSavedGame('sudoku');
   const online = useOnline();
@@ -127,9 +133,15 @@ export default function App() {
       setLogoutNote(LOGOUT_OFFLINE);
       return;
     }
-    setLogoutNote('');
     // A save still on its way would otherwise arrive after the session has ended.
-    await Promise.all([mahjong.flush(), sudoku.flush()]);
+    setLogoutNote('Saving your last moves.');
+    const sent = await Promise.all([mahjong.flush(), sudoku.flush()]);
+    setLogoutNote('');
+    if (sent.every(Boolean)) await endSession();
+    else setAskingLogout(true);
+  };
+
+  const endSession = async () => {
     try {
       await logout();
       goToLogin();
@@ -141,6 +153,7 @@ export default function App() {
   let shown;
   if (screen === 'mahjong') {
     shown = (
+      <GameBoundary name="Mahjong" onNewGame={mahjong.giveUp} onHome={goHome}>
       <Mahjong
         level={mahjongLevel}
         onLevel={setMahjongLevel}
@@ -148,21 +161,26 @@ export default function App() {
         onGame={mahjong.setState}
         ready={mahjong.ready}
         online={online}
+        unplayable={mahjong.unplayable}
         onHome={goHome}
       />
+      </GameBoundary>
     );
   } else if (screen === 'sudoku') {
     shown = (
+      <GameBoundary name="Sudoku" onNewGame={sudoku.giveUp} onHome={goHome}>
       <SudokuGame
         game={sudoku.state}
         onGame={sudoku.setState}
         ready={sudoku.ready}
         online={online}
+        unplayable={sudoku.unplayable}
         onBack={goHome}
       />
+      </GameBoundary>
     );
   } else {
-    shown = <Home onOpen={setScreen} onLogOut={() => void logOut()} note={logoutNote} />;
+    shown = <Home onOpen={setScreen} onLogOut={() => void logOut()} note={logoutNote} inert={askingLogout} />;
   }
 
   const worst = [mahjong.saving, sudoku.saving];
@@ -172,7 +190,22 @@ export default function App() {
       <SaveMarker
         saving={worst.includes('offline') ? 'offline' : worst.includes('retrying') ? 'retrying' : 'saved'}
         signedOut={mahjong.signedOut || sudoku.signedOut}
+        refused={mahjong.refused || sudoku.refused}
+        checking={mahjong.checking || sudoku.checking}
       />
+      {askingLogout && (
+        <ConfirmDialog
+          title="Log out anyway?"
+          line="Your last moves are not saved, and will be lost."
+          keepLabel="Stay"
+          confirmLabel="Log out"
+          onKeep={() => setAskingLogout(false)}
+          onConfirm={() => {
+            setAskingLogout(false);
+            void endSession();
+          }}
+        />
+      )}
     </>
   );
 }
