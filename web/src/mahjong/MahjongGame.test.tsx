@@ -104,6 +104,7 @@ describe('setup', () => {
     rerender(<MahjongSetup level="medium" onLevel={onLevel} onStart={onStart} onBack={vi.fn()} />);
     expect(screen.getByRole('button', { name: /^Trophy/ })).toBeTruthy();
     expect(screen.queryByRole('button', { name: /^Fort/ })).toBeNull();
+    random.mockReturnValue(0);
     await user.click(screen.getByRole('button', { name: 'Random' }));
     expect(onStart).toHaveBeenLastCalledWith(layoutsFor('medium')[0]);
   });

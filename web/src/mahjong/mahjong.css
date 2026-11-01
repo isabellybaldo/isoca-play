@@ -54,7 +54,7 @@
 
 .mj-types {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); /* four cards a level: two rows, never wider than the phone */
   gap: 16px;
   margin: 16px 0;
   padding-right: 5px;
@@ -70,8 +70,8 @@
   box-shadow: 5px 5px 0 var(--line);
 }
 .mj-type:active { transform: translate(5px, 5px); box-shadow: none; }
-.mj-shape { display: block; width: 100%; max-width: 104px; height: auto; margin-bottom: 8px; }
-.mj-type-name { font-family: var(--px); font-size: 11px; line-height: 1.4; }
+.mj-shape { display: block; width: 100%; max-width: 104px; max-height: 104px; height: auto; margin-bottom: 8px; }
+.mj-type-name { font-family: var(--px); font-size: 11px; line-height: 1.4; max-width: 100%; overflow-wrap: anywhere; }
 .mj-type-count { font-family: var(--big); font-size: 20px; line-height: 1; color: var(--dim); }
 
 /* Game: every row is sized so the tallest board still fits a 320x568 phone.
