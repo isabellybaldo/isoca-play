@@ -95,8 +95,15 @@ def test_rollback_smoke_check_needs_the_version_to_change():
     assert "BEFORE: ${{ steps.before.outputs.version }}" in rollback
     assert '"$version" != "$BEFORE"' in rollback
     assert rollback.index("Note the version before the rollback") < rollback.index("Roll back on the box")
-    # the version is read with retries, and an unreadable one stops the job
-    assert "for attempt in" in rollback
-    assert "version=unreadable" not in rollback.split("Roll back on the box")[0].split("Note the version")[1]
+    # the version is read with retries, and an unreadable one never stops the rollback
+    note = rollback.split("Roll back on the box")[0].split("Note the version")[1]
+    assert "for attempt in" in note
+    assert "exit 1" not in note
+    assert "::error::" not in note
+    assert 'echo "version=" >>"$GITHUB_OUTPUT"' in note
+    # with nothing to compare, it passes on /login and a readable version, and says so
+    assert '[ "$login" = 200 ] && [ "$version" != unreadable ]' in rollback
+    assert 'if [ -z "$BEFORE" ]; then' in rollback
+    assert "::warning::The version before the rollback could not be read, so the change could not be compared." in rollback
     assert rollback.count('=~ ^[A-Za-z0-9._-]{1,64}$') == 2
     assert "or the previous digest is from the same commit; check last-result" in rollback
