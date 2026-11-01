@@ -34,9 +34,9 @@ test('buttons meet the tap target by default', () => {
 });
 
 test('the three fonts are self-hosted and named in the theme', () => {
-  const main = readFileSync('src/main.tsx', 'utf8');
+  const fonts = readFileSync('src/fonts.css', 'utf8');
   for (const pkg of ['press-start-2p', 'vt323', 'ibm-plex-mono']) {
-    expect(main).toContain(`@fontsource/${pkg}`);
+    expect(fonts).toContain(`@fontsource/${pkg}`);
   }
   for (const family of ['Press Start 2P', 'VT323', 'IBM Plex Mono']) {
     expect(css).toContain(`'${family}'`);
