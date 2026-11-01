@@ -311,7 +311,8 @@ export function fullChain(values: number[]): TipStep[] {
 
 // Only the steps the placed digit depends on, walking back from it: a step stays if it removed
 // something a later kept step relies on, and only those removals stay with it. A candidate no
-// step removed was ruled out by written digits, so it needs nothing kept.
+// step removed was ruled out by written digits, so it needs nothing kept. An empty chain means
+// the ten techniques cannot reach a number from these digits.
 export function tipChain(values: number[]): TipStep[] {
   const steps = fullChain(values);
   if (!steps[steps.length - 1]?.places) return [];

@@ -6,13 +6,26 @@ import { newSudoku } from '../api';
 import { blanked, SOLUTION as SOLVED } from '../fakeServer.testutil';
 import type { Puzzle, SudokuState } from './rules';
 import SudokuGame from './SudokuGame';
+import { tipChain } from './tips';
 
 vi.mock('../api', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../api')>()),
   newSudoku: vi.fn(),
 }));
 
-const PACK: Puzzle[] = [blanked('easy', [0, 1, 2]), blanked('easy', [40, 41, 42]), blanked('hard', [78, 79, 80]), blanked('hard', [60, 61, 62])];
+vi.mock('./tips', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./tips')>();
+  return { ...real, tipChain: vi.fn(real.tipChain) };
+});
+
+// A board whose tip takes two steps: Locked Candidates takes a 9 out of square 13, then it must be 7.
+const TWO_STEPS: Puzzle = {
+  level: 'medium',
+  givens: '3718245.....3.1.84.84.5..314...1.87.91...8...8.7..5.1.1.8.6.3.....183....325.91.8',
+  solution: '371824596569371284284956731453612879916738452827495613198267345645183927732549168',
+};
+
+const PACK: Puzzle[] = [blanked('easy', [0, 1, 2]), blanked('easy', [40, 41, 42]), blanked('hard', [78, 79, 80]), blanked('hard', [60, 61, 62]), TWO_STEPS, blanked('medium', [10, 11, 12])];
 
 // What the server does: a puzzle of the level, never the one on screen.
 beforeEach(() => {
@@ -312,5 +325,180 @@ describe('new game', () => {
     await user.click(screen.getByRole('button', { name: 'Start new game' }));
     expect(await screen.findByText('That did not work. Try again.')).toBeTruthy();
     expect(valueOf(0)).toBe('4');
+  });
+});
+
+// A tip is only a view: it asks, it never writes.
+describe('tips', () => {
+  const tipButton = () => screen.getByRole('button', { name: 'Tip' }) as HTMLButtonElement;
+  const next = () => screen.queryByRole('button', { name: 'Next' });
+  const close = () => screen.queryByRole('button', { name: 'Close' });
+  const lit = () => cells().flatMap((c, i) => (c.classList.contains('is-tip') ? [i] : []));
+  const wrong = () => cells().flatMap((c, i) => (c.classList.contains('is-wrong') ? [i] : []));
+
+  test('a Tip button sits beside Return, and is off once the game is won', async () => {
+    const { user } = await start();
+    expect(tipButton().parentElement).toBe(screen.getByRole('button', { name: 'Return' }).parentElement);
+    expect(tipButton().disabled).toBe(false);
+    await fill(user, FIRST_BLANKS, (c) => SOLUTION[c]);
+    expect(tipButton().disabled).toBe(true);
+  });
+
+  test('with no tap, nothing is lit or said, whatever the board holds', async () => {
+    const { user } = await start();
+    await fill(user, FIRST_BLANKS, wrongDigit);
+    expect(note()).toBe('Not solved.');
+    expect(lit()).toEqual([]);
+    expect(wrong()).toEqual([]);
+    expect(cells().some((c) => /tip|wrong/.test(c.getAttribute('aria-label')!))).toBe(false);
+    expect(close()).toBeNull();
+    expect(tipChain).not.toHaveBeenCalled();
+  });
+
+  test('wrong numbers come first: all of them, a word to fix them, no move', async () => {
+    const { user } = await start();
+    await writeIn(user, 0, wrongDigit(0));
+    await writeIn(user, 1, SOLUTION[1]);
+    await writeIn(user, 2, wrongDigit(2));
+    await user.click(tipButton());
+    expect(wrong()).toEqual([0, 2]);
+    for (const c of [0, 2]) expect(cells()[c].getAttribute('aria-label')).toMatch(/, wrong$/);
+    expect(cells()[1].getAttribute('aria-label')).not.toMatch(/wrong/);
+    expect(note()).toMatch(/fix/i);
+    expect(next()).toBeNull();
+    expect(lit()).toEqual([]);
+    expect(tipChain).not.toHaveBeenCalled();
+    await user.click(close()!);
+    expect(wrong()).toEqual([]);
+    expect(cells()[0].getAttribute('aria-label')).not.toMatch(/wrong/);
+  });
+
+  test('a full board that is not solved gets the same, and its message returns on Close', async () => {
+    const { user } = await start();
+    await fill(user, FIRST_BLANKS, wrongDigit);
+    await user.click(tipButton());
+    expect(wrong()).toEqual(FIRST_BLANKS);
+    expect(note()).toMatch(/fix/i);
+    expect(next()).toBeNull();
+    await user.click(close()!);
+    expect(note()).toBe('Not solved.');
+  });
+
+  test('a one-step tip lights the squares, says why, and has no Next', async () => {
+    const { user } = await start();
+    await user.click(tipButton());
+    expect(tipChain).toHaveBeenCalledOnce();
+    const step = vi.mocked(tipChain).mock.results[0].value[0];
+    expect(step.cells.length).toBeGreaterThan(0);
+    expect(lit()).toEqual([...step.cells].sort((a: number, b: number) => a - b));
+    for (const c of step.cells) expect(cells()[c].getAttribute('aria-label')).toMatch(/, tip$/);
+    expect(note()).toContain(step.because);
+    expect(next()).toBeNull();
+    expect(valueOf(step.places.cell)).toBeUndefined();
+    expect(cells()[step.places.cell].querySelector('.tip-digit')?.textContent).toBe(String(step.places.digit));
+    await user.click(close()!);
+    expect(lit()).toEqual([]);
+    expect(note()).toBe('');
+  });
+
+  test('Next walks the chain: removed numbers drawn in their squares, then the placed one', async () => {
+    const { user } = await start('Medium');
+    await user.click(tipButton());
+    expect(lit()).toEqual([10, 11]);
+    expect(note()).toContain("so the rest of row 2 can't be 9");
+    expect([...cells()[13].querySelectorAll('.tip-cut')].map((e) => e.textContent)).toEqual(['9']);
+    expect(cells()[13].classList.contains('is-written')).toBe(false);
+    await user.click(next()!);
+    expect(lit()).toEqual([13]);
+    expect(note()).toContain('only 7 fits');
+    expect(cells()[13].querySelector('.tip-cut')).toBeNull();
+    expect(valueOf(13)).toBeUndefined();
+    expect(cells()[13].querySelector('.tip-digit')?.textContent).toBe('7');
+    expect(cells()[13].classList.contains('is-placed')).toBe(true);
+    expect(next()).toBeNull();
+    await user.click(close()!);
+    expect(lit()).toEqual([]);
+    expect(cells()[13].querySelector('.tip-digit, .tip-cut')).toBeNull();
+  });
+
+  test('says so when no move can be found', async () => {
+    const { user } = await start();
+    vi.mocked(tipChain).mockReturnValueOnce([]);
+    await user.click(tipButton());
+    expect(note()).toBe('No tip for this board.');
+    expect(next()).toBeNull();
+    expect(lit()).toEqual([]);
+    await user.click(close()!);
+    expect(note()).toBe('');
+  });
+
+  test('a tip changes nothing and saves nothing', async () => {
+    let game: SudokuState | null = null;
+    const onGame = vi.fn();
+    function Spy() {
+      const [g, setG] = useState<SudokuState | null>(null);
+      return (
+        <SudokuGame
+          game={g}
+          onGame={(a) => {
+            onGame(a);
+            game = typeof a === 'function' ? a(game) : a;
+            setG(a);
+          }}
+          onBack={vi.fn()}
+        />
+      );
+    }
+    render(<Spy />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: 'Medium' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await user.click(cells()[13]);
+    await user.click(mode('Notes'));
+    await user.click(pad(3));
+    const before = JSON.stringify(game);
+    const calls = onGame.mock.calls.length;
+    await user.click(tipButton());
+    await user.click(next()!);
+    await user.click(close()!);
+    await user.click(tipButton());
+    expect(onGame.mock.calls.length).toBe(calls);
+    expect(JSON.stringify(game)).toBe(before);
+  });
+
+  test('picking another square or the other mode keeps the tip', async () => {
+    const { user } = await start('Medium');
+    await user.click(tipButton());
+    await user.click(cells()[40]);
+    await user.click(mode('Notes'));
+    expect(lit()).toEqual([10, 11]);
+    expect(close()).not.toBeNull();
+  });
+
+  test('Return, a number, a note or a new game closes it', async () => {
+    const { user } = await start('Medium');
+    await writeIn(user, 8, 4);
+    await user.click(tipButton());
+    expect(close()).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'Return' }));
+    expect(close()).toBeNull();
+
+    await user.click(tipButton());
+    await user.click(cells()[8]);
+    await user.click(mode('Write'));
+    await user.click(pad(2));
+    expect(close()).toBeNull();
+
+    await user.click(tipButton());
+    await user.click(cells()[9]);
+    await user.click(mode('Notes'));
+    await user.click(pad(4));
+    expect(close()).toBeNull();
+
+    await user.click(tipButton());
+    expect(close()).not.toBeNull();
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    await user.click(await screen.findByRole('button', { name: 'Start new game' }));
+    await waitFor(() => expect(close()).toBeNull());
   });
 });

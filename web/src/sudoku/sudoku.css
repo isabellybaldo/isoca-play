@@ -129,3 +129,36 @@
 .sd-pad button + button { margin-left: -2px; }
 .sd-pad button:active { background: var(--line); color: var(--bg); }
 .sd-pad.is-notes button { border-style: dashed; border-color: var(--accent); font-size: 22px; color: var(--accent); }
+
+/* Tip: a view over the board, nothing written. A lit square has a dashed pink frame, a wrong
+   one a rose ground; a crossed-out small number is a candidate the tip rules out, and the
+   placed number is only outlined, so it never looks written. */
+.sd-acts { display: flex; gap: 8px; }
+.cell.is-tip { background: var(--card); color: var(--fg); outline: 3px dashed var(--accent); outline-offset: -3px; }
+.cell.is-tip.is-selected { background: #ffd166; color: var(--page); }
+.cell.is-wrong { background: var(--rose); color: var(--fg); outline: 3px dashed var(--accent); outline-offset: -3px; }
+.notes > .tip-cut {
+  color: var(--accent);
+  font-weight: 700;
+  text-decoration: line-through;
+  text-decoration-thickness: 2px;
+}
+.cell .tip-digit {
+  display: grid;
+  place-items: center;
+  width: 70%;
+  height: 70%;
+  font-family: var(--big);
+  font-size: 30px;
+  line-height: 1;
+  color: var(--line);
+  border: 2px dashed var(--line);
+}
+/* long text wraps inside the phone width instead of widening it */
+.sd-note.sd-tip {
+  height: auto;
+  line-height: 1.7;
+  padding: 2px 4px;
+  overflow-wrap: anywhere;
+}
+.sd-tipbtns { display: flex; justify-content: center; gap: 8px; }

@@ -36,6 +36,11 @@ export function hasMovesToLose(s: SudokuState): boolean {
   return s.history.length > 0 && s.status !== 'won';
 }
 
+// The written squares that differ from the solution. Only a tip asks; the board never shows it.
+export function wrongCells(s: SudokuState): number[] {
+  return s.values.flatMap((v, cell) => (v !== 0 && !isGiven(s, cell) && String(v) !== s.puzzle.solution[cell] ? [cell] : []));
+}
+
 export function selectCell(s: SudokuState, cell: number): SudokuState {
   return { ...s, selected: cell };
 }
