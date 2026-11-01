@@ -69,7 +69,7 @@ def test_ssh_checks_the_pinned_host_key_and_keeps_its_errors_out_of_the_log():
     calls = re.findall(r"out=\$\(ssh [^\n]*", RELEASE)
     assert len(calls) == 2
     for call in calls:
-        assert "-o StrictHostKeyChecking=yes -o UserKnownHostsFile=" in call
+        assert "-o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile=" in call
     assert RELEASE.count('2>"$RUNNER_TEMP/ssh/err")') == 2
     assert 'chmod 600 "$RUNNER_TEMP/ssh/key"' in RELEASE
     assert RELEASE.count('rm -rf "$RUNNER_TEMP/ssh"') == 2
@@ -95,3 +95,8 @@ def test_rollback_smoke_check_needs_the_version_to_change():
     assert "BEFORE: ${{ steps.before.outputs.version }}" in rollback
     assert '"$version" != "$BEFORE"' in rollback
     assert rollback.index("Note the version before the rollback") < rollback.index("Roll back on the box")
+    # the version is read with retries, and an unreadable one stops the job
+    assert "for attempt in" in rollback
+    assert "version=unreadable" not in rollback.split("Roll back on the box")[0].split("Note the version")[1]
+    assert rollback.count('=~ ^[A-Za-z0-9._-]{1,64}$') == 2
+    assert "or the previous digest is from the same commit; check last-result" in rollback

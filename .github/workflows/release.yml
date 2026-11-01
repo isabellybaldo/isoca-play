@@ -125,7 +125,7 @@ jobs:
         run: |
           [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::bad digest"; exit 1; }
           rc=0
-          out=$(ssh -i "$RUNNER_TEMP/ssh/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+          out=$(ssh -i "$RUNNER_TEMP/ssh/key" -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
             -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             -p "$DEPLOY_PORT" "deploy@$DEPLOY_HOST" "release play $DIGEST" </dev/null 2>"$RUNNER_TEMP/ssh/err") || rc=$?
           echo "$out"
@@ -184,15 +184,23 @@ jobs:
           printf "%s\n" "$DEPLOY_KNOWN_HOSTS" >"$RUNNER_TEMP/ssh/known_hosts"
           chmod 600 "$RUNNER_TEMP/ssh/key"
 
-      # A site that is down has no version to read, and that is often why someone rolls
-      # back. Then any version that answers afterwards counts as changed.
+      # The smoke check needs this to compare against, so an unreadable version stops here.
+      # For a site that is down, roll back on the box: the runbook's "If something breaks".
       - name: Note the version before the rollback
         id: before
         run: |
-          version=$(curl -sS --max-time 10 "$SITE_URL/healthz" | jq -r '.version') || version=''
-          [[ "$version" =~ ^[A-Za-z0-9._-]{1,64}$ ]] && [ "$version" != null ] || version=unreadable
-          echo "before the rollback: version $version"
-          echo "version=$version" >>"$GITHUB_OUTPUT"
+          for attempt in 1 2 3 4 5 6; do
+            version=$(curl -sS --max-time 10 "$SITE_URL/healthz" | jq -r '.version') || version=''
+            if [[ "$version" =~ ^[A-Za-z0-9._-]{1,64}$ ]] && [ "$version" != null ]; then
+              echo "before the rollback: version $version"
+              echo "version=$version" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "attempt $attempt: no version"
+            [ "$attempt" -eq 6 ] || sleep 10
+          done
+          echo "::error::$SITE_URL/healthz gave no version, so a rollback could not be confirmed. Nothing was rolled back."
+          exit 1
 
       - name: Roll back on the box
         env:
@@ -200,7 +208,7 @@ jobs:
           DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
         run: |
           rc=0
-          out=$(ssh -i "$RUNNER_TEMP/ssh/key" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+          out=$(ssh -i "$RUNNER_TEMP/ssh/key" -o StrictHostKeyChecking=yes -o GlobalKnownHostsFile=/dev/null -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
             -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
             -p "$DEPLOY_PORT" "deploy@$DEPLOY_HOST" "rollback play" </dev/null 2>"$RUNNER_TEMP/ssh/err") || rc=$?
           echo "$out"
@@ -219,13 +227,13 @@ jobs:
           while :; do
             login=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$SITE_URL/login") || login=000
             version=$(curl -sS --max-time 10 "$SITE_URL/healthz" | jq -r '.version') || version=unreadable
-            [ -n "$version" ] && [ "$version" != null ] || version=unreadable
+            [[ "$version" =~ ^[A-Za-z0-9._-]{1,64}$ ]] && [ "$version" != null ] || version=unreadable
             echo "login $login, version $version, was $BEFORE"
             if [ "$login" = 200 ] && [ "$version" != unreadable ] && [ "$version" != "$BEFORE" ]; then exit 0; fi
             [ "$SECONDS" -lt "$deadline" ] || break
             sleep 10
           done
-          echo "::error::The rollback was handed to the box, but within 2 minutes $SITE_URL did not show a version other than $BEFORE with /login answering 200. The rollback did not take effect."
+          echo "::error::The rollback was handed to the box, but within 2 minutes $SITE_URL did not show a version other than $BEFORE with /login answering 200. The rollback did not take effect, or the previous digest is from the same commit; check last-result."
           exit 1
 
       - name: Remove the SSH key
