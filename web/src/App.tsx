@@ -1,10 +1,13 @@
 import { useState } from 'react';
 import Home from './Home';
+import type { Layout, Level } from './mahjong/layouts';
+import MahjongGame from './mahjong/MahjongGame';
+import MahjongSetup from './mahjong/MahjongSetup';
 import { TileArt } from './mahjong/TileArt';
 
 export type Screen = 'home' | 'mahjong' | 'sudoku';
 
-// Stands in for the game screens, which arrive in Tasks 5 and 6.
+// Stands in for the sudoku screens, which arrive in Task 6.
 function Soon({ name, face, onBack }: { name: string; face: string; onBack: () => void }) {
   return (
     <main className="shell">
@@ -18,11 +21,19 @@ function Soon({ name, face, onBack }: { name: string; face: string; onBack: () =
   );
 }
 
+// The level lives here so it is still picked on coming back from a game.
+function Mahjong({ onHome }: { onHome: () => void }) {
+  const [level, setLevel] = useState<Level>('easy');
+  const [layout, setLayout] = useState<Layout | null>(null);
+  if (layout) return <MahjongGame layout={layout} onBack={() => setLayout(null)} />;
+  return <MahjongSetup level={level} onLevel={setLevel} onStart={setLayout} onBack={onHome} />;
+}
+
 export default function App() {
   const [screen, setScreen] = useState<Screen>('home');
   const goHome = () => setScreen('home');
 
-  if (screen === 'mahjong') return <Soon name="Mahjong" face="cat" onBack={goHome} />;
+  if (screen === 'mahjong') return <Mahjong onHome={goHome} />;
   if (screen === 'sudoku') return <Soon name="Sudoku" face="star" onBack={goHome} />;
   return <Home onOpen={setScreen} />;
 }
