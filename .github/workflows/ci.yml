@@ -41,7 +41,7 @@ jobs:
       - name: web, tests and build (build runs tsc)
         working-directory: web
         run: |
-          npm ci
+          npm ci --ignore-scripts
           npm test
           npm run build
 

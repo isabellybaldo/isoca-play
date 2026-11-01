@@ -28,8 +28,7 @@ const WEB = dirname(dirname(fileURLToPath(import.meta.url)));
 const SERVER = join(WEB, '..', 'server');
 const PASSWORD = 'a throwaway password for this run';
 const CSP =
-  "default-src 'self'; script-src 'self'; style-src 'self'; worker-src 'self'; connect-src 'self'; " +
-  "font-src 'self'; img-src 'self' data:; form-action 'self'; base-uri 'none'; frame-ancestors 'none'";
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'";
 const WAIT = 8000;
 const SAVES = 'isoca-play-saves';
 
