@@ -127,7 +127,9 @@ type Screen<G extends GameName> = {
 // last confirmed game and says so, and nothing is unsent, so nothing goes back to the
 // server. On a check it is ignored: it can only be as old as what this tab has, or older.
 // Until a real answer comes, this tab keeps asking with a growing wait: the first request
-// after a connection returns can fail, and no further wake may come.
+// after a connection returns can fail, and no further wake may come. Those checks run in
+// the background: moves apply at once, and if the server turns out to have something newer
+// the moves still stand as unsent, last save wins.
 //
 // Tabs tell each other two things. "loaded": a tab has just opened, perhaps after a log
 // in, so one waiting with unsent moves tries now. "saved": there is something new to
@@ -268,13 +270,13 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     again = false;
     if (unsent || timer !== undefined) return;
     busy = true;
-    refreshing = true;
+    refreshing = !fromCache;
     const note = setTimeout(() => screen.checking(true), CHECKING_NOTE_AFTER);
     let adopted = false;
     try {
       const { body, cached } = await loadSave(game);
       const text = JSON.stringify(body);
-      if (!cached && body !== null && text !== savedText) {
+      if (!cached && !unsent && body !== null && text !== savedText) {
         savedText = text;
         if (playable(body)) {
           state = body as State;
@@ -289,7 +291,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
         heardFromCache();
       } else {
         heardFromServer();
-        screen.saving('saved');
+        if (!unsent) screen.saving('saved');
         screen.signedOut(false);
       }
     } catch (error) {

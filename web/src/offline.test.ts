@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, describe, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { CACHED_HEADER, clearDevice, registerWorker } from './offline';
 
 const ORIGIN = 'https://play.test';
@@ -37,7 +37,8 @@ function fakeCaches() {
     open: async (name: string) => open(name),
     keys: async () => [...stores.keys()],
     delete: async (name: string) => stores.delete(name),
-    match: async (key: string | Request) => {
+    match: async (key: string | Request, options?: { cacheName?: string }) => {
+      if (options?.cacheName) return stores.get(options.cacheName)?.get(pathOf(key))?.clone();
       for (const store of stores.values()) {
         const found = store.get(pathOf(key));
         if (found) return found.clone();
@@ -49,7 +50,7 @@ function fakeCaches() {
 }
 
 // The hand-written worker, run as it is, with its browser around it.
-function worker(network: (path: string) => Response) {
+function worker(network: (path: string) => Response | Promise<Response>) {
   const listeners: Record<string, (event: never) => void> = {};
   const caches = fakeCaches();
   const self = {
@@ -68,16 +69,21 @@ function worker(network: (path: string) => Response) {
     listeners[name]({ waitUntil: (p: Promise<unknown>) => (done = p) } as never);
     await done;
   };
-  // undefined means the worker left the request alone.
-  const request = async (path: string, init: RequestInit & { navigate?: boolean } = {}) => {
+  // answer is undefined when the worker left the request alone.
+  const send = (path: string, init: RequestInit & { navigate?: boolean } = {}) => {
     let answer: Promise<Response> | undefined;
     const { navigate, ...rest } = init;
     const req = new Request(new URL(path, ORIGIN), rest);
     if (navigate) Object.defineProperty(req, 'mode', { value: 'navigate' });
-    listeners.fetch({ request: req, respondWith: (p: Promise<Response>) => (answer = Promise.resolve(p)) } as never);
-    return answer;
+    listeners.fetch({
+      request: req,
+      respondWith: (p: Promise<Response>) => (answer = Promise.resolve(p)),
+      waitUntil: () => {},
+    } as never);
+    return { answer };
   };
-  return { caches, self, fetchIt, lifecycle, request };
+  const request = async (path: string, init: RequestInit & { navigate?: boolean } = {}) => send(path, init).answer;
+  return { caches, self, fetchIt, lifecycle, request, send };
 }
 
 const noNetwork = (): Response => {
@@ -207,7 +213,7 @@ describe('saves', () => {
 
   test.each([
     ['a 401', () => from(new Response('{}', { status: 401 }))],
-    ['a 503', () => from(new Response('', { status: 503 }))],
+    ['a 500', () => from(new Response('', { status: 500 }))],
     ['a redirect', () => from(new Response('login'), { redirected: true })],
   ])('%s passes through and leaves the kept save alone', async (_name, answer) => {
     const response = answer();
@@ -261,6 +267,175 @@ describe('saves', () => {
     await keep(w, new Response('{"old":1}'));
     await expect(w.request(path, put('{"new":1}'))).rejects.toThrow(TypeError);
     expect(await w.caches.held(SAVES, path)!.text()).toBe('{"old":1}');
+  });
+});
+
+describe('a connection that hangs', () => {
+  const save = '/api/save/sudoku';
+  const never = () => new Promise<Response>(() => {});
+  const nav = { navigate: true };
+  // A network whose answers the test gives by hand.
+  function byHand() {
+    const waiting: ((response: Response) => void)[] = [];
+    return { waiting, network: () => new Promise<Response>((resolve) => waiting.push(resolve)) };
+  }
+  const seen = (answer: Promise<Response> | undefined) => {
+    const state = { response: undefined as Response | undefined };
+    void answer!.then((r) => (state.response = r));
+    return state;
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  test('a navigation falls back to the shell after 3 seconds, not before', async () => {
+    const w = worker(never);
+    await (await w.caches.open(APP)).put('/', new Response('shell'));
+    const state = seen(w.send('/', nav).answer);
+    await vi.advanceTimersByTimeAsync(2900);
+    expect(state.response).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await state.response!.text()).toBe('shell');
+  });
+
+  test('with no shell a navigation keeps waiting, so a slow link still loads', async () => {
+    const hand = byHand();
+    const w = worker(hand.network);
+    const state = seen(w.send('/', nav).answer);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(state.response).toBeUndefined();
+    hand.waiting[0](ok('late page'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await state.response!.text()).toBe('late page');
+  });
+
+  test('a save load falls back to the kept save after 3 seconds, marked', async () => {
+    const w = worker(never);
+    await (await w.caches.open(SAVES)).put(save, new Response('{"kept":1}'));
+    const state = seen(w.send(save).answer);
+    await vi.advanceTimersByTimeAsync(2900);
+    expect(state.response).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(200);
+    expect(await state.response!.text()).toBe('{"kept":1}');
+    expect(state.response!.headers.get(CACHED_HEADER)).toBe('1');
+  });
+
+  test('with nothing kept a save load keeps waiting, past the page limit if it must', async () => {
+    const hand = byHand();
+    const w = worker(hand.network);
+    const state = seen(w.send(save).answer);
+    await vi.advanceTimersByTimeAsync(20_000);
+    expect(state.response).toBeUndefined();
+    hand.waiting[0](ok('{"late":1}'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await state.response!.text()).toBe('{"late":1}');
+  });
+
+  test('a late answer still updates the kept save', async () => {
+    const hand = byHand();
+    const w = worker(hand.network);
+    await (await w.caches.open(SAVES)).put(save, new Response('{"old":1}'));
+    const state = seen(w.send(save).answer);
+    await vi.advanceTimersByTimeAsync(3100);
+    expect(await state.response!.text()).toBe('{"old":1}');
+    hand.waiting[0](ok('{"late":1}'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await w.caches.held(SAVES, save)!.text()).toBe('{"late":1}');
+  });
+
+  test('a late answer asked before a confirmed save does not replace that save', async () => {
+    const hand = byHand();
+    const w = worker(hand.network);
+    await (await w.caches.open(SAVES)).put(save, new Response('{"old":1}'));
+    w.send(save);
+    await vi.advanceTimersByTimeAsync(3100);
+    const put = w.send(save, { method: 'PUT', body: '{"new":1}' }).answer;
+    await vi.advanceTimersByTimeAsync(0);
+    hand.waiting[1](from(new Response(null, { status: 204 })));
+    await put;
+    hand.waiting[0](ok('{"late":1}'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await w.caches.held(SAVES, save)!.text()).toBe('{"new":1}');
+  });
+
+  test('right after a timeout saves come from the device at once, so a reopen does not wait twice', async () => {
+    const hand = byHand();
+    const w = worker(hand.network);
+    await (await w.caches.open(APP)).put('/', new Response('shell'));
+    await (await w.caches.open(SAVES)).put(save, new Response('{"kept":1}'));
+    w.send('/', nav);
+    await vi.advanceTimersByTimeAsync(3100);
+    const state = seen(w.send(save).answer);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(await state.response!.text()).toBe('{"kept":1}');
+
+    hand.waiting[0](ok('late page')); // a real answer: the link is back
+    await vi.advanceTimersByTimeAsync(0);
+    w.send(save);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(hand.waiting).toHaveLength(2);
+  });
+});
+
+describe('a gateway error while the site is being replaced', () => {
+  const save = '/api/save/sudoku';
+  const nav = { navigate: true };
+  const gateway = (status: number) => () => from(new Response('bad gateway', { status }));
+
+  test.each([502, 503, 504])('%i: a navigation gets the shell, a save load the kept save, marked', async (status) => {
+    const w = worker(gateway(status));
+    await (await w.caches.open(APP)).put('/', new Response('shell'));
+    await (await w.caches.open(SAVES)).put(save, new Response('{"kept":1}'));
+    expect(await (await w.request('/', nav))!.text()).toBe('shell');
+    const answer = (await w.request(save))!;
+    expect(await answer.text()).toBe('{"kept":1}');
+    expect(answer.headers.get(CACHED_HEADER)).toBe('1');
+  });
+
+  test.each([502, 503, 504])('%i with nothing kept passes through', async (status) => {
+    const w = worker(gateway(status));
+    expect((await w.request('/', nav))!.status).toBe(status);
+    expect((await w.request(save))!.status).toBe(status);
+    expect(await w.caches.keys()).toEqual([]);
+  });
+
+  test.each([401, 403, 404, 500])('%i is the server talking: it passes through over a kept copy', async (status) => {
+    const w = worker(gateway(status));
+    await (await w.caches.open(APP)).put('/', new Response('shell'));
+    await (await w.caches.open(SAVES)).put(save, new Response('{"kept":1}'));
+    expect((await w.request('/', nav))!.status).toBe(status);
+    expect((await w.request(save))!.status).toBe(status);
+  });
+
+  test('a redirect passes through over a kept shell', async () => {
+    const redirect = from(new Response(null, { status: 200 }), { type: 'opaqueredirect' });
+    const w = worker(() => redirect);
+    await (await w.caches.open(APP)).put('/', new Response('shell'));
+    expect(await w.request('/', nav)).toBe(redirect);
+  });
+
+  test('a save that met a gateway error is not on the device, and fails to the page', async () => {
+    const w = worker(gateway(503));
+    await (await w.caches.open(SAVES)).put(save, new Response('{"old":1}'));
+    const answer = (await w.request(save, { method: 'PUT', body: '{"new":1}' }))!;
+    expect(answer.status).toBe(503);
+    expect(await w.caches.held(SAVES, save)!.text()).toBe('{"old":1}');
+  });
+});
+
+describe('a tab left over after log out', () => {
+  test.each([
+    ['no network', noNetwork],
+    ['a 401', () => from(new Response('{}', { status: 401 }))],
+  ])('with %s, a save load or a save creates no cache', async (_name, network) => {
+    const w = worker(network);
+    await w.request('/api/save/sudoku').catch(() => {});
+    await w.request('/api/save/sudoku', { method: 'PUT', body: '{}' }).catch(() => {});
+    expect(await w.caches.keys()).toEqual([]);
   });
 });
 

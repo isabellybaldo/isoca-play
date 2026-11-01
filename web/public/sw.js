@@ -1,5 +1,6 @@
 // Keeps the app and the last save the server confirmed on this device, so a game loaded
-// once stays playable with no connection. Only "no network" reaches the cache: any answer
+// once stays playable with no connection. Only "no network" reaches the cache: a failure,
+// a link that does not answer in time, or a gateway saying the server is away. Any answer
 // from the server, a redirect to /login or a 401 included, passes through as it is.
 //
 // The build replaces these two values (see the plugin in vite.config.ts).
@@ -12,6 +13,14 @@ const SHELL = '/';
 const GAMES = ['mahjong', 'sudoku'];
 const SAVE_PATH = /^\/api\/save\/[^/]+$/;
 const CACHED_HEADER = 'X-Isoca-Cached'; // how the page tells a kept save from the server's
+const WAIT_FOR_NETWORK = 3000; // well under the 10 seconds after which the page gives up
+const STAY_ON_KEPT = 5000; // after a timeout, how long saves skip the network
+const LATE_LIMIT = 30_000;
+const NOT_REACHED = new Set([502, 503, 504]);
+
+let noAnswerUntil = 0;
+let tickets = 0;
+const keptTicket = new Map();
 
 // A redirect or the login page must never be kept as the app or as a save.
 const worthKeeping = (response) => response.ok && !response.redirected && response.type === 'basic';
@@ -30,15 +39,33 @@ async function precache() {
   await Promise.all(urls.map((url, i) => cache.put(url, responses[i])));
 }
 
+// Opened only to store: a tab left over after log out must not recreate an empty cache.
+// A ticket is taken when a load starts and when a save is confirmed, so a late answer to
+// an older question cannot replace something newer.
+async function keepSave(url, ticket, response) {
+  if (ticket < (keptTicket.get(url) ?? 0)) return;
+  keptTicket.set(url, ticket);
+  const cache = await caches.open(SAVES_CACHE);
+  await cache.put(url, response);
+}
+
+async function keptSave(url) {
+  const kept = await caches.match(url, { cacheName: SAVES_CACHE });
+  if (!kept) return undefined;
+  const headers = new Headers(kept.headers);
+  headers.set(CACHED_HEADER, '1');
+  return new Response(kept.body, { status: kept.status, statusText: kept.statusText, headers });
+}
+
 // The first page asked for its saves before this worker could see them.
 async function fetchMissingSaves() {
-  const cache = await caches.open(SAVES_CACHE);
   await Promise.allSettled(
     GAMES.map(async (game) => {
       const url = `/api/save/${game}`;
-      if (await cache.match(url)) return;
+      if (await caches.match(url, { cacheName: SAVES_CACHE })) return;
+      const ticket = ++tickets;
       const response = await fetch(url);
-      if (worthKeeping(response)) await cache.put(url, response);
+      if (worthKeeping(response)) await keepSave(url, ticket, response);
     }),
   );
 }
@@ -48,39 +75,69 @@ async function removeOldCaches() {
   await Promise.all(names.filter((n) => n !== APP_CACHE && n !== SAVES_CACHE).map((n) => caches.delete(n)));
 }
 
-async function navigate(request) {
-  try {
-    return await fetch(request);
-  } catch (error) {
-    const shell = await caches.match(SHELL);
-    if (shell) return shell;
-    throw error;
-  }
+// The network, unless it fails, hangs or only a gateway answers, and a kept copy exists.
+// With nothing kept, whatever the network does is the answer, however slow.
+function networkOrKept(network, kept) {
+  return new Promise((resolve, reject) => {
+    const fallBack = async (otherwise) => {
+      const copy = await kept();
+      if (copy) resolve(copy);
+      else otherwise();
+    };
+    const timer = setTimeout(() => {
+      noAnswerUntil = Date.now() + STAY_ON_KEPT;
+      void fallBack(() => {});
+    }, WAIT_FOR_NETWORK);
+    network.then(
+      (response) => {
+        clearTimeout(timer);
+        if (NOT_REACHED.has(response.status)) {
+          void fallBack(() => resolve(response));
+          return;
+        }
+        noAnswerUntil = 0;
+        resolve(response);
+      },
+      (error) => {
+        clearTimeout(timer);
+        void fallBack(() => reject(error));
+      },
+    );
+  });
 }
 
-async function loadSave(request) {
-  const cache = await caches.open(SAVES_CACHE);
-  let response;
-  try {
-    response = await fetch(request);
-  } catch (error) {
-    const kept = await cache.match(request.url);
-    if (!kept) throw error; // a network failure, never "no saved game"
-    const headers = new Headers(kept.headers);
-    headers.set(CACHED_HEADER, '1');
-    return new Response(kept.body, { status: kept.status, statusText: kept.statusText, headers });
+function navigate(request) {
+  return networkOrKept(fetch(request), () => caches.match(SHELL));
+}
+
+async function loadSave(event) {
+  const { request } = event;
+  const { url } = request;
+  // The link just hung, so a reopen does not wait a second time for each save.
+  if (Date.now() < noAnswerUntil) {
+    const copy = await keptSave(url);
+    if (copy) return copy;
   }
-  if (worthKeeping(response)) await cache.put(request.url, response.clone());
-  return response;
+  const ticket = ++tickets;
+  // Past a fallback this request runs on by itself, to update the kept copy. It must end
+  // some time: hung requests would use up the browser's connections.
+  const signal = AbortSignal.any([request.signal, AbortSignal.timeout(LATE_LIMIT)]);
+  const network = fetch(request, { signal }).then(async (response) => {
+    if (worthKeeping(response)) await keepSave(url, ticket, response.clone());
+    return response;
+  });
+  event.waitUntil(network.catch(() => {}));
+  return networkOrKept(network, () => keptSave(url));
 }
 
 // Kept only once the server has confirmed it, before the page hears that it has.
 async function storeSave(request) {
   const body = await request.clone().text();
   const response = await fetch(request);
+  if (!NOT_REACHED.has(response.status)) noAnswerUntil = 0;
   if (worthKeeping(response)) {
-    const cache = await caches.open(SAVES_CACHE);
-    await cache.put(request.url, new Response(body, { headers: { 'Content-Type': 'application/json' } }));
+    const kept = new Response(body, { headers: { 'Content-Type': 'application/json' } });
+    await keepSave(request.url, ++tickets, kept);
   }
   return response;
 }
@@ -115,7 +172,7 @@ self.addEventListener('fetch', (event) => {
   } else if (request.mode === 'navigate') {
     event.respondWith(navigate(request));
   } else if (isSave) {
-    event.respondWith(loadSave(request));
+    event.respondWith(loadSave(event));
   } else if (ASSETS.includes(url.pathname)) {
     event.respondWith(asset(request));
   }

@@ -266,8 +266,13 @@ try {
     await board(p).getByRole('button', { name: /, empty$/ }).first().click();
     await p.getByRole('group', { name: 'Numbers' }).getByRole('button', { name: digit, exact: true }).click();
   };
-  const saved = (p, game = 'sudoku') =>
-    p.waitForResponse((r) => r.request().method() === 'PUT' && r.url().endsWith(`/api/save/${game}`) && r.status() === 204);
+  const saved = (p, game = 'sudoku') => {
+    const response = p.waitForResponse(
+      (r) => r.request().method() === 'PUT' && r.url().endsWith(`/api/save/${game}`) && r.status() === 204,
+    );
+    response.catch(() => {}); // a timeout fails its check where it is awaited, not the run
+    return response;
+  };
   const noMarker = (p = page, timeout = 15000) =>
     p.waitForFunction(() => !document.querySelector('.save-marker'), null, { timeout });
 
@@ -426,7 +431,75 @@ try {
     await button(page, 'Resume Easy, 2 moves').waitFor();
     await button(page, 'Back to home').click();
   });
+
+  console.log('-- a connection that hangs: accepted, and never answered');
+  const hanging = new Set();
+  const hangingListener = net.createServer((socket) => {
+    hanging.add(socket);
+    socket.on('error', () => {});
+  });
+  await new Promise((resolve) => hangingListener.listen(port, '127.0.0.1', resolve));
+  await check('reopen shows the game in about 3 seconds, with the marker', async () => {
+    const started = Date.now();
+    await reload();
+    await home();
+    await button(page, /Sudoku/).click();
+    await button(page, 'Resume Easy, 2 moves').waitFor();
+    const took = Date.now() - started;
+    console.log(`      reopen took ${took} ms`);
+    yes(took < 5000, `took ${took} ms`);
+    yes(/Offline/.test(await marker(page).textContent()), 'marker text');
+  });
+  await check('moves respond immediately on the hanging connection', async () => {
+    await button(page, 'Resume Easy, 2 moves').click();
+    const before = await board(page).getByRole('button', { name: /, written / }).count();
+    await board(page).getByRole('button', { name: /, empty$/ }).first().click();
+    const started = Date.now();
+    await page.getByRole('group', { name: 'Numbers' }).getByRole('button', { name: '3', exact: true }).click();
+    await page.waitForFunction(
+      (n) => document.querySelectorAll('.sd-board button[aria-label*="written"]').length === n,
+      before + 1,
+    );
+    const took = Date.now() - started;
+    console.log(`      the move took ${took} ms`);
+    yes(took < 1000, `took ${took} ms`);
+  });
+  await check('when the real server returns, the latest state saves', async () => {
+    for (const socket of hanging) socket.destroy();
+    await new Promise((resolve) => hangingListener.close(resolve));
+    await startServer();
+    await noMarker(page, 45000);
+    same((await serverSave('sudoku')).body.history.length, 3, 'moves on the server');
+    same(await heldMoves('sudoku'), 3, 'moves kept');
+  });
+
+  console.log('-- a deploy: the gateway answers 503');
+  await stopServer();
+  const gateway = https.createServer(
+    { key: readFileSync(join(temp, 'key.pem')), cert: readFileSync(join(temp, 'cert.pem')) },
+    (_request, response) => {
+      response.writeHead(503, { 'Content-Type': 'text/plain' });
+      response.end('deploying');
+    },
+  );
+  await new Promise((resolve) => gateway.listen(port, '127.0.0.1', resolve));
+  await check('a page reopened during a deploy shows the cached app and game, with the marker', async () => {
+    await reload();
+    await home();
+    await marker(page).waitFor();
+    yes(/Offline/.test(await marker(page).textContent()), 'marker text');
+    await button(page, /Sudoku/).click();
+    await button(page, 'Resume Easy, 3 moves').waitFor();
+    yes(!(await page.content()).includes('deploying'), 'the gateway page is showing');
+  });
+  gateway.closeAllConnections();
+  await new Promise((resolve) => gateway.close(resolve));
   await startServer();
+  await check('after the deploy the marker clears, and nothing was written', async () => {
+    const puts = putsSeen('sudoku');
+    await noMarker(page, 45000);
+    same(putsSeen('sudoku'), puts, 'PUTs reaching the server');
+  });
 
   console.log('-- online with no session');
   const cookies = await context.cookies();
@@ -443,20 +516,20 @@ try {
   await check('the login page and the redirect were not kept as the shell, or as a save', async () => {
     const shell = await page.evaluate(async () => (await caches.match('/')).text());
     yes(shell.includes('id="root"') && !shell.includes('type="password"'), 'the shell was replaced');
-    same(await heldMoves('sudoku'), 2, 'moves kept');
+    same(await heldMoves('sudoku'), 3, 'moves kept');
   });
   await context.addCookies(cookies);
   await check('an API 401 keeps its flow: the marker, the game in memory, and it saves after logging in', async () => {
     await page.goto('/');
     await button(page, /Sudoku/).click();
-    await button(page, 'Resume Easy, 2 moves').click();
+    await button(page, 'Resume Easy, 3 moves').click();
     await context.clearCookies();
     await play(page, '8');
     await page.getByRole('link', { name: 'Log in' }).waitFor({ timeout: 15000 });
     await context.addCookies(cookies);
     await noMarker(page, 40000);
-    same((await serverSave('sudoku')).body.history.length, 3, 'moves on the server');
-    same(await heldMoves('sudoku'), 3, 'moves kept');
+    same((await serverSave('sudoku')).body.history.length, 4, 'moves on the server');
+    same(await heldMoves('sudoku'), 4, 'moves kept');
   });
 
   console.log('-- a new release');
@@ -478,7 +551,7 @@ try {
 
   await check('an open page on the old bundle is not reloaded, and still saves', async () => {
     await button(oldPage, /Sudoku/).click();
-    await button(oldPage, 'Resume Easy, 3 moves').click();
+    await button(oldPage, 'Resume Easy, 4 moves').click();
     const put = saved(oldPage);
     await play(oldPage, '9');
     await put;
@@ -503,10 +576,10 @@ try {
     await play(oldPage, '1');
     await put;
     same(await stillOld(oldPage), true, 'old page');
-    same((await serverSave('sudoku', oldPage)).body.history.length, 5, 'moves on the server');
+    same((await serverSave('sudoku', oldPage)).body.history.length, 6, 'moves on the server');
   });
   await check('the saves survived the release', async () => {
-    same(await heldMoves('sudoku'), 5, 'moves kept');
+    same(await heldMoves('sudoku'), 6, 'moves kept');
   });
   await check('offline after the release, a reload runs the new version', async () => {
     await page.bringToFront();
@@ -515,7 +588,7 @@ try {
     await home();
     same(await page.evaluate(() => globalThis.__isocaRelease), 'B', 'release');
     await button(page, /Sudoku/).click();
-    await button(page, 'Resume Easy, 5 moves').waitFor();
+    await button(page, 'Resume Easy, 6 moves').waitFor();
     await button(page, 'Back to home').click();
     same(await stillOld(oldPage), true, 'old page');
     await goOnline();

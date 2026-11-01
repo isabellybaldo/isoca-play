@@ -581,6 +581,46 @@ describe('offline, with the worker answering', () => {
     expect(server.requests.length).toBe(asked);
   });
 
+  test('on a kept game, a move during a slow check lands at once and stands over newer server state', async () => {
+    const server = fakeServer({ sudoku: game(9) });
+    server.worker = { sudoku: game(7) };
+    const { result } = await opened();
+
+    server.worker = null;
+    let answer = () => {};
+    server.gate = new Promise<void>((resolve) => (answer = resolve));
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    act(() => result.current.setState(move(1)));
+    expect(result.current.state).toEqual(move(1)); // with the check still out
+
+    server.gate = null;
+    answer();
+    await pass();
+    expect(result.current.state).toEqual(move(1));
+    expect(server.saves.sudoku).toEqual(move(1));
+    expect(server.puts('sudoku')).toEqual([move(1)]);
+    expect(result.current.saving).toBe('saved');
+  });
+
+  test('on a kept game, a check that fails drops no move, which saves later', async () => {
+    const server = fakeServer({ sudoku: game(7) });
+    server.worker = { sudoku: game(7) };
+    const { result } = await opened();
+    let answer = () => {};
+    server.gate = new Promise<void>((resolve) => (answer = resolve));
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    act(() => result.current.setState(move(1)));
+    server.gate = null;
+    server.worker = {};
+    answer();
+    await pass();
+    expect(result.current.state).toEqual(move(1));
+
+    server.worker = null;
+    await pass(30_000);
+    expect(server.saves.sudoku).toEqual(move(1));
+  });
+
   test('a load from the cache does not tell the other tabs to try', async () => {
     const server = fakeServer({ sudoku: game(1) });
     const first = await opened();
