@@ -3,23 +3,9 @@ import Home from './Home';
 import type { Layout, Level } from './mahjong/layouts';
 import MahjongGame from './mahjong/MahjongGame';
 import MahjongSetup from './mahjong/MahjongSetup';
-import { TileArt } from './mahjong/TileArt';
+import SudokuGame from './sudoku/SudokuGame';
 
 export type Screen = 'home' | 'mahjong' | 'sudoku';
-
-// Stands in for the sudoku screens, which arrive in Task 6.
-function Soon({ name, face, onBack }: { name: string; face: string; onBack: () => void }) {
-  return (
-    <main className="shell">
-      <button type="button" className="back" onClick={onBack}>Back to home</button>
-      <div className="soon">
-        <span className="tile" aria-hidden="true"><TileArt face={face} /></span>
-        <h1>{name}</h1>
-        <p>This game is still being built.</p>
-      </div>
-    </main>
-  );
-}
 
 // The level lives here so it is still picked on coming back from a game.
 function Mahjong({ onHome }: { onHome: () => void }) {
@@ -34,6 +20,6 @@ export default function App() {
   const goHome = () => setScreen('home');
 
   if (screen === 'mahjong') return <Mahjong onHome={goHome} />;
-  if (screen === 'sudoku') return <Soon name="Sudoku" face="star" onBack={goHome} />;
+  if (screen === 'sudoku') return <SudokuGame onBack={goHome} />;
   return <Home onOpen={setScreen} />;
 }

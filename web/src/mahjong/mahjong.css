@@ -152,28 +152,3 @@
 .mj-end .tile { width: 44px; }
 .mj-end-title { font-family: var(--px); font-size: 14px; line-height: 1.4; }
 .mj-end-line { font-family: var(--big); font-size: 20px; line-height: 1.1; color: var(--dim); }
-
-/* The question before a new game */
-.mj-dialog-veil {
-  position: fixed;
-  inset: 0;
-  z-index: 10;
-  display: grid;
-  place-items: center;
-  padding: 16px;
-  background: rgb(18 10 26 / 0.82);
-}
-.mj-dialog {
-  width: min(320px, 100%);
-  display: grid;
-  gap: 12px;
-  padding: 16px;
-  background: var(--card);
-  border: 3px solid var(--accent);
-  box-shadow: 6px 6px 0 var(--accent);
-}
-.mj-dialog h2 { font-family: var(--px); font-size: 12px; line-height: 1.5; font-weight: 400; }
-.mj-dialog p { font-family: var(--big); font-size: 22px; line-height: 1.1; color: var(--dim); }
-.mj-dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; padding-right: 3px; }
-.mj-dialog-actions .back { flex: 1 1 auto; }
-.mj-confirm { border-color: var(--accent); background: var(--rose); box-shadow: 3px 3px 0 var(--accent); }

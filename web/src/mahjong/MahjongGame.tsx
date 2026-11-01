@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
+import ConfirmDialog from '../ConfirmDialog';
 import { boardBox, tilePosition, tileWidth } from './boardSize';
 import { makeDeal } from './deal';
 import type { Layout } from './layouts';
@@ -122,23 +123,12 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
   const [state, setState] = useState(() => deal(layout));
   const [viewport, setViewport] = useState(viewportWidth);
   const [asking, setAsking] = useState(false);
-  const newGameButton = useRef<HTMLButtonElement>(null);
-  const keepButton = useRef<HTMLButtonElement>(null);
-  const wasAsking = useRef(false);
 
   useEffect(() => {
     const measure = () => setViewport(viewportWidth());
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
-
-  // Focus follows the question in and back out. This runs after commit, once
-  // the game behind has stopped being inert and can take focus again.
-  useEffect(() => {
-    if (asking) keepButton.current?.focus();
-    else if (wasAsking.current) newGameButton.current?.focus();
-    wasAsking.current = asking;
-  }, [asking]);
 
   const width = tileWidth(layout, viewport);
   const box = boardBox(layout, width);
@@ -201,7 +191,6 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
             Return
           </button>
           <button
-            ref={newGameButton}
             type="button"
             className="back"
             onClick={() => {
@@ -215,33 +204,17 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
       </main>
 
       {asking && (
-        <div
-          className="mj-dialog-veil"
-          tabIndex={-1}
-          onKeyDown={(event) => {
-            if (event.key === 'Escape') setAsking(false);
+        <ConfirmDialog
+          title="Start a new game?"
+          line="This game's moves will be lost."
+          keepLabel="Keep playing"
+          confirmLabel="Start new game"
+          onKeep={() => setAsking(false)}
+          onConfirm={() => {
+            setState(deal(layout));
+            setAsking(false);
           }}
-        >
-          <div className="mj-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mj-ask" aria-describedby="mj-ask-line">
-            <h2 id="mj-ask">Start a new game?</h2>
-            <p id="mj-ask-line">This game's moves will be lost.</p>
-            <div className="mj-dialog-actions">
-              <button ref={keepButton} type="button" className="back" onClick={() => setAsking(false)}>
-                Keep playing
-              </button>
-              <button
-                type="button"
-                className="back mj-confirm"
-                onClick={() => {
-                  setState(deal(layout));
-                  setAsking(false);
-                }}
-              >
-                Start new game
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       )}
     </>
   );
