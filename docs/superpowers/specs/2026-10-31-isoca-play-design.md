@@ -226,8 +226,8 @@ new games, and game rules run on the phone.
 - Traefik router with `sec`, `rl` and `inflight`, plus its own strict CSP with
   `connect-src 'self'` and `form-action 'self'`.
 
-**Deploy (owner rule: GitHub Actions only, no deploys from the PC).** The `deploy`
-user has no docker access, and today's key can upload static sites, roll back any
+**Deploy (owner rule: GitHub Actions only, no deploys from the PC).** The restricted
+deploy account has no docker access, and today's key can upload static sites, roll back any
 site, and replace all of Traefik's routing through `edge-config`. A service needs a
 new path, and this repo should not hold that much power. So `isoca-play` gets its
 own key, limited to releasing and rolling back this one service. That needs a second
@@ -236,7 +236,7 @@ own key, limited to releasing and rolling back this one service. That needs a se
 ```
 push to main (owner)
   -> Actions: tests, then build image, push to public GHCR, note its digest
-  -> ssh deploy@box "release play sha256:..."      new verb in box/site-deploy
+  -> ssh, as the restricted deploy account: "release play sha256:..."      new verb in box/site-deploy
   -> site-deploy validates the digest, writes /srv/play/desired-image
   -> root systemd path unit sees the change, runs compose pull and up by digest
   -> Actions smoke check: /login answers 200 and the deployed version matches

@@ -131,12 +131,6 @@ button {
 .mini span.quiet { color: var(--dim); }
 .mini span .pixels { width: 32px; }
 
-/* Waiting room for the game screens */
-.soon { display: grid; justify-items: start; gap: 20px; margin-top: 24px; }
-.soon h1 { font-family: var(--px); font-size: 20px; line-height: 1.4; font-weight: 400; }
-.soon .tile { width: 68px; }
-.soon p { font-family: var(--big); font-size: 24px; line-height: 1.1; color: var(--dim); }
-
 /* The question before a new game */
 .dialog-veil {
   position: fixed;
