@@ -133,11 +133,11 @@ write the real number.
 - Writing a number replaces that square's notes. **(owner confirmed)**
 - Return undoes one change, of either kind, with no limit. **(owner confirmed)**
 
-**No warnings (owner).** No red numbers, no mistake count, no hints, no timer. (Tips on request were added later, see
-`2026-11-01-tips-maps-no-slots-design.md`; nothing is ever shown unasked.) To
-keep that honest **(call)**: notes are never erased automatically, and same-number
-highlighting is left out, since either would expose conflicts. Only the selected
-square is highlighted.
+**No warnings (owner).** No red numbers, no mistake count, no hints, no timer. (Tips on
+request were added later, see `2026-11-01-tips-maps-no-slots-design.md`; nothing is ever
+shown unasked.) To keep that honest **(call)**: notes are never erased automatically, and
+same-number highlighting is left out, since either would expose conflicts. Only the
+selected square is highlighted.
 
 **End (owner confirmed).** When the board is full it reports won or not solved,
 without saying where. The player can then return and keep trying, or start over.
