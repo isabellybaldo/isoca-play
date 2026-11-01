@@ -143,7 +143,18 @@ describe('back keeps the game', () => {
 
     await user.click(screen.getByRole('button', { name: /^Frame/ }));
     await user.click(screen.getByRole('button', { name: 'Keep playing' }));
-    expect(screen.getByRole('button', { name: 'Resume Frame, 1 move' })).toBeTruthy();
+    expect(screen.getByRole('group', { name: 'Board' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }));
+
+    // Looking at another level, a shape there asks too, and Keep playing leads back to the held game's level.
+    const held = screen.getByRole('button', { name: 'Resume Frame, 1 move' });
+    expect(held).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Hard' }));
+    await user.click(screen.getByRole('button', { name: /^Fort/ }));
+    await user.click(screen.getByRole('button', { name: 'Keep playing' }));
+    expect(screen.getByRole('group', { name: 'Board' })).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }));
+    expect(screen.getByRole('button', { name: 'Hard' }).getAttribute('aria-pressed')).toBe('false');
 
     await user.click(screen.getByRole('button', { name: /^Frame/ }));
     await user.click(screen.getByRole('button', { name: 'Start new game' }));
@@ -194,7 +205,7 @@ describe('back keeps the game', () => {
 
     await user.click(screen.getByRole('button', { name: 'Medium' }));
     await user.click(screen.getByRole('button', { name: 'Keep playing' }));
-    await user.click(screen.getByRole('button', { name: 'Resume Easy, 1 move' }));
+    expect(screen.getByRole('group', { name: 'Board' })).toBeTruthy();
     expect(look()).not.toEqual(held);
 
     await user.click(screen.getByRole('button', { name: 'Back to levels' }));

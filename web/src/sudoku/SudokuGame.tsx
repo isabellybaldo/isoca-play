@@ -263,7 +263,10 @@ export default function SudokuGame({
           line={unplayable ? REPLACE_UNPLAYABLE : 'This game will be lost.'}
           keepLabel="Keep playing"
           confirmLabel="Start new game"
-          onKeep={() => setReplacing(null)}
+          onKeep={() => {
+            setReplacing(null);
+            if (game) setPlaying(true);
+          }}
           onConfirm={() => {
             void start(replacing);
             setReplacing(null);

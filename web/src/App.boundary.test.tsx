@@ -52,6 +52,9 @@ test('a game that will not draw shows a note, keeps New game, and leaves the oth
   await user.click(screen.getByRole('button', { name: /^Trophy/ }));
   expect(screen.getByRole('alertdialog')).toBeTruthy();
   await user.click(screen.getByRole('button', { name: 'Keep playing' }));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(screen.queryByRole('group', { name: 'Board' })).toBeNull();
+  expect(screen.getByText('The saved game could not be opened.')).toBeTruthy();
 
   await user.click(screen.getByRole('button', { name: 'Back to home' }));
   await user.click(screen.getByRole('button', { name: /Sudoku/ }));
