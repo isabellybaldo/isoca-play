@@ -15,11 +15,10 @@ on:
 permissions:
   contents: read
 
-# One at a time, in order, rollbacks included.
-concurrency:
-  group: release-play
-  cancel-in-progress: false
-
+# Deploys and rollbacks share one group, so one at a time touches the box. Publishes have
+# their own, which keeps deploys in commit order: a run reaches deploy only after its
+# publish. Neither is a queue: GitHub holds one waiting job per group and a newer one
+# replaces it, so a waiting job can be cancelled, and that includes a waiting rollback.
 env:
   IMAGE: ghcr.io/isabellybaldo/isoca-play
   SITE_URL: https://play.isoca.space
@@ -34,6 +33,7 @@ jobs:
     if: github.ref == 'refs/heads/main' && !inputs.rollback
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    concurrency: publish-play
     permissions:
       contents: read
       packages: write
@@ -49,14 +49,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
 
-      - name: Build, push and read the digest back
+      - name: Build, push and take the digest from the push
         id: push
         run: |
           [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad commit id"; exit 1; }
           docker buildx build --push --provenance=false --sbom=false --platform linux/amd64 \
+            --metadata-file "$RUNNER_TEMP/build-metadata.json" \
             --build-arg "VERSION=$GITHUB_SHA" --tag "$IMAGE:$GITHUB_SHA" .
-          digest=$(docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" --format '{{.Manifest.Digest}}')
-          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::the registry gave no digest"; exit 1; }
+          digest=$(jq -r '."containerimage.digest"' "$RUNNER_TEMP/build-metadata.json")
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::the build reported no digest"; exit 1; }
           echo "digest=$digest" >>"$GITHUB_OUTPUT"
 
       - name: Log out of the registry
@@ -69,6 +70,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
+    concurrency: deploy-play
     steps:
       - name: Check the secrets and write the SSH files
         env:
@@ -130,6 +132,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: production
     timeout-minutes: 15
+    concurrency: deploy-play
     steps:
       - name: Check the secrets and write the SSH files
         env:

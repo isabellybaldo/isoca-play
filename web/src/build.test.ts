@@ -26,6 +26,13 @@ describe('the built site', () => {
 
   afterAll(() => rmSync(outDir, { recursive: true, force: true }));
 
+  test('ships the IBM Plex Mono licence with the build that holds its font', () => {
+    expect(assets.some((f) => f.startsWith('ibm-plex-mono-'))).toBe(true);
+    const licence = readFileSync(join(outDir, 'licenses', 'ibm-plex-mono-LICENSE.txt'), 'utf8');
+    expect(licence).toContain('SIL Open Font License');
+    expect(licence).toContain('Copyright 2017 IBM Corp.');
+  });
+
   test('has hashed script and style files, and the page loads them from the root', () => {
     expect(assets.filter((f) => f.endsWith('.js')).length).toBeGreaterThan(0);
     expect(assets.filter((f) => f.endsWith('.css')).length).toBeGreaterThan(0);

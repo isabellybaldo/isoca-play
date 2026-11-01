@@ -50,7 +50,7 @@ function fakeCaches() {
 }
 
 // The hand-written worker, run as it is, with its browser around it.
-function worker(network: (path: string) => Response | Promise<Response>) {
+function worker(network: (path: string, init?: RequestInit) => Response | Promise<Response>) {
   const listeners: Record<string, (event: never) => void> = {};
   const caches = fakeCaches();
   const self = {
@@ -61,7 +61,7 @@ function worker(network: (path: string) => Response | Promise<Response>) {
     skipWaiting: vi.fn(async () => {}),
     clients: { claim: vi.fn(async () => {}) },
   };
-  const fetchIt = vi.fn(async (input: string | Request) => network(pathOf(input)));
+  const fetchIt = vi.fn(async (input: string | Request, init?: RequestInit) => network(pathOf(input), init));
   new Function('self', 'caches', 'fetch', source)(self, caches, fetchIt);
 
   const lifecycle = async (name: 'install' | 'activate') => {
@@ -83,7 +83,16 @@ function worker(network: (path: string) => Response | Promise<Response>) {
     return { answer };
   };
   const request = async (path: string, init: RequestInit & { navigate?: boolean } = {}) => send(path, init).answer;
-  return { caches, self, fetchIt, lifecycle, request, send };
+  // What clearDevice sends. Resolves when the worker answers on the port.
+  const told = () =>
+    new Promise<void>((resolve) => {
+      listeners.message({
+        data: { type: 'logging-out' },
+        ports: [{ postMessage: () => resolve() }],
+        waitUntil: () => {},
+      } as never);
+    });
+  return { caches, self, fetchIt, lifecycle, request, send, told };
 }
 
 const noNetwork = (): Response => {
@@ -155,6 +164,23 @@ describe('activate', () => {
     const off = worker(noNetwork);
     await off.lifecycle('activate');
     expect(off.self.clients.claim).toHaveBeenCalled();
+  });
+});
+
+describe('activate on a link that hangs', () => {
+  test('the missing saves give up in time, and the worker still claims the pages', async () => {
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => AbortSignal.abort());
+    const w = worker(
+      (_path, init) =>
+        new Promise((_resolve, reject) => {
+          const { signal } = init!;
+          if (signal!.aborted) reject(signal!.reason);
+          signal!.addEventListener('abort', () => reject(signal!.reason));
+        }),
+    );
+    await w.lifecycle('activate');
+    expect(AbortSignal.timeout).toHaveBeenCalledWith(3000);
+    expect(w.self.clients.claim).toHaveBeenCalled();
   });
 });
 
@@ -439,6 +465,80 @@ describe('a tab left over after log out', () => {
   });
 });
 
+describe('told that a log out has started', () => {
+  const save = { method: 'PUT', body: '{"moves":1}' };
+
+  test('a save answer landing after that puts nothing back', async () => {
+    const answers: ((response: Response) => void)[] = [];
+    const w = worker(() => new Promise((resolve) => answers.push(resolve)));
+    const loading = w.request('/api/save/sudoku');
+    const storing = w.request('/api/save/sudoku', save);
+    await vi.waitFor(() => expect(w.fetchIt).toHaveBeenCalledTimes(2));
+    await w.told();
+    answers.forEach((answer) => answer(ok('{"moves":1}')));
+    await Promise.allSettled([loading, storing]);
+    expect(await w.caches.keys()).toEqual([]);
+  });
+
+  test('later loads and saves pass through, and keep nothing', async () => {
+    const w = worker(() => ok('{"moves":2}'));
+    await w.told();
+    expect(await (await w.request('/api/save/sudoku'))!.text()).toBe('{"moves":2}');
+    expect((await w.request('/api/save/sudoku', save))!.ok).toBe(true);
+    expect(await w.caches.keys()).toEqual([]);
+  });
+
+  test('it answers only when the write under way is done', async () => {
+    const w = worker(() => ok());
+    const realOpen = w.caches.open;
+    let letOpen = () => {};
+    w.caches.open = (name) => new Promise((resolve) => (letOpen = () => resolve(realOpen(name))));
+    const storing = w.request('/api/save/sudoku', save);
+    await vi.waitFor(() => expect(w.fetchIt).toHaveBeenCalled());
+    let answered = false;
+    const telling = w.told().then(() => (answered = true));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(answered).toBe(false);
+    letOpen();
+    await telling;
+    await storing;
+    expect(answered).toBe(true);
+  });
+});
+
+describe('keeping saves', () => {
+  test('writes land in order: a slow older write cannot replace a newer one', async () => {
+    const w = worker(() => ok());
+    const realOpen = w.caches.open;
+    let calls = 0;
+    let letFirst = () => {};
+    w.caches.open = async (name) => {
+      calls += 1;
+      if (calls === 1) await new Promise<void>((resolve) => (letFirst = resolve));
+      return realOpen(name);
+    };
+    const older = w.request('/api/save/sudoku', { method: 'PUT', body: 'older' });
+    await vi.waitFor(() => expect(calls).toBe(1));
+    const newer = w.request('/api/save/sudoku', { method: 'PUT', body: 'newer' });
+    await new Promise((r) => setTimeout(r, 20));
+    letFirst();
+    await Promise.all([older, newer]);
+    expect(await w.caches.held(SAVES, '/api/save/sudoku')!.text()).toBe('newer');
+  });
+
+  test('a failed write does not stop the next one', async () => {
+    const w = worker(() => ok());
+    const realOpen = w.caches.open;
+    w.caches.open = async () => {
+      w.caches.open = realOpen;
+      throw new Error('quota');
+    };
+    await expect(w.request('/api/save/sudoku', { method: 'PUT', body: 'lost' })).rejects.toThrow('quota');
+    await w.request('/api/save/sudoku', { method: 'PUT', body: 'kept' });
+    expect(await w.caches.held(SAVES, '/api/save/sudoku')!.text()).toBe('kept');
+  });
+});
+
 describe('what the worker leaves alone', () => {
   test.each([
     ['/logout', { method: 'POST' }],
@@ -491,6 +591,30 @@ describe('in the page', () => {
     expect(unregister).toHaveBeenCalledTimes(2);
     expect(remove.mock.calls.map(([name]) => name)).toEqual(['a', 'b']);
     expect(order.slice(0, 2)).toEqual(['unregister', 'unregister']);
+  });
+
+  test('clearDevice tells each worker first, and waits for its answer', async () => {
+    const { order, unregister } = device();
+    const post = vi.fn((_message: unknown, ports: MessagePort[]) => {
+      order.push('told');
+      ports[0].postMessage('done');
+    });
+    vi.stubGlobal('navigator', {
+      serviceWorker: { getRegistrations: async () => [{ active: { postMessage: post }, unregister }] },
+    });
+    await clearDevice();
+    expect(post.mock.calls[0][0]).toEqual({ type: 'logging-out' });
+    expect(order.slice(0, 2)).toEqual(['told', 'unregister']);
+  });
+
+  test('a worker that never answers does not stop clearDevice', async () => {
+    const { unregister, remove } = device();
+    vi.stubGlobal('navigator', {
+      serviceWorker: { getRegistrations: async () => [{ active: { postMessage: () => {} }, unregister }] },
+    });
+    await clearDevice();
+    expect(unregister).toHaveBeenCalled();
+    expect(remove).toHaveBeenCalled();
   });
 
   test('clearDevice carries on past a failure and never throws', async () => {

@@ -21,6 +21,8 @@ const NOT_REACHED = new Set([502, 503, 504]);
 let noAnswerUntil = 0;
 let tickets = 0;
 const keptTicket = new Map();
+let loggingOut = false; // told by clearDevice: nothing more goes on the device
+let writes = Promise.resolve();
 
 // A redirect or the login page must never be kept as the app or as a save.
 const worthKeeping = (response) => response.ok && !response.redirected && response.type === 'basic';
@@ -41,12 +43,17 @@ async function precache() {
 
 // Opened only to store: a tab left over after log out must not recreate an empty cache.
 // A ticket is taken when a load starts and when a save is confirmed, so a late answer to
-// an older question cannot replace something newer.
-async function keepSave(url, ticket, response) {
-  if (ticket < (keptTicket.get(url) ?? 0)) return;
-  keptTicket.set(url, ticket);
-  const cache = await caches.open(SAVES_CACHE);
-  await cache.put(url, response);
+// an older question cannot replace something newer. One write at a time, so that a slow
+// older write cannot land on top of a newer one.
+function keepSave(url, ticket, response) {
+  const write = writes.then(async () => {
+    if (loggingOut || ticket < (keptTicket.get(url) ?? 0)) return;
+    keptTicket.set(url, ticket);
+    const cache = await caches.open(SAVES_CACHE);
+    await cache.put(url, response);
+  });
+  writes = write.catch(() => {}); // a failed write is its caller's, and must not stop the next
+  return write;
 }
 
 async function keptSave(url) {
@@ -64,7 +71,8 @@ async function fetchMissingSaves() {
       const url = `/api/save/${game}`;
       if (await caches.match(url, { cacheName: SAVES_CACHE })) return;
       const ticket = ++tickets;
-      const response = await fetch(url);
+      // Pages wait for activation, so a hung link must not hold them up.
+      const response = await fetch(url, { signal: AbortSignal.timeout(WAIT_FOR_NETWORK) });
       if (worthKeeping(response)) await keepSave(url, ticket, response);
     }),
   );
@@ -158,6 +166,13 @@ self.addEventListener('activate', (event) => {
       .then(fetchMissingSaves)
       .then(() => self.clients.claim()),
   );
+});
+
+// From clearDevice, before it removes the caches. The answer means no write can follow.
+self.addEventListener('message', (event) => {
+  if (event.data?.type !== 'logging-out') return;
+  loggingOut = true;
+  event.waitUntil(writes.then(() => event.ports[0]?.postMessage('done')));
 });
 
 self.addEventListener('fetch', (event) => {

@@ -13,11 +13,28 @@ export function registerWorker(): void {
   });
 }
 
+const TOLD_WAIT = 500; // a worker busy or asleep must not hold up the log out
+
+// Resolves when the worker says it will store nothing more, or after a short wait.
+function tell(worker: ServiceWorker): Promise<void> {
+  return new Promise((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(resolve, TOLD_WAIT);
+    channel.port1.onmessage = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    worker.postMessage({ type: 'logging-out' }, [channel.port2]);
+  });
+}
+
 // Worker first, so it cannot store anything after its caches are gone. Each step carries
 // on past a failure: the session has already ended, and the rest should still go.
 export async function clearDevice(): Promise<void> {
   try {
     const registrations = (await navigator.serviceWorker?.getRegistrations()) ?? [];
+    const running = registrations.flatMap((r) => [r.installing, r.waiting, r.active].filter((w) => w != null));
+    await Promise.allSettled(running.map(tell));
     await Promise.allSettled(registrations.map((registration) => registration.unregister()));
   } catch {
     // Carry on to the caches.

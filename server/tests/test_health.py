@@ -15,10 +15,27 @@ def test_healthz_is_public_and_names_the_version(client):
 
 def test_the_image_entry_point_reads_the_environment(tmp_path, monkeypatch):
     monkeypatch.setenv("DB_PATH", str(tmp_path / "play.db"))
-    monkeypatch.setenv("STATIC_DIR", str(tmp_path / "static"))
+    static = tmp_path / "static"
+    static.mkdir()
+    (static / "index.html").write_text("<!doctype html>")
+    monkeypatch.setenv("STATIC_DIR", str(static))
     monkeypatch.setenv("APP_VERSION", "abc123")
     r = TestClient(app_from_env(), base_url=BASE_URL).get("/healthz")
     assert r.json() == {"version": "abc123"}
+
+
+def test_the_image_entry_point_will_not_start_with_no_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "play.db"))
+    monkeypatch.setenv("STATIC_DIR", str(tmp_path / "missing"))
+    with pytest.raises(RuntimeError, match="missing"):
+        app_from_env()
+
+
+def test_the_image_entry_point_will_not_start_with_no_index(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "play.db"))
+    monkeypatch.setenv("STATIC_DIR", str(tmp_path))
+    with pytest.raises(RuntimeError, match="index.html"):
+        app_from_env()
 
 
 def test_settings_now_is_injectable(settings, clock):

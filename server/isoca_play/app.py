@@ -70,5 +70,12 @@ def create_app(settings: Settings) -> FastAPI:
 
 
 def app_from_env() -> FastAPI:
-    """What the image runs: `uvicorn --factory isoca_play.app:app_from_env`."""
-    return create_app(from_env())
+    """What the image runs: `uvicorn --factory isoca_play.app:app_from_env`.
+
+    A release with no frontend must fail at start-up, where the health check and the
+    deploy catch it, not answer 404 to every page behind a healthy /healthz."""
+    settings = from_env()
+    index = settings.static_dir / "index.html"
+    if not index.is_file():
+        raise RuntimeError(f"STATIC_DIR is missing its build: no file at {index}")
+    return create_app(settings)
