@@ -7,7 +7,7 @@ from typing import Iterator
 
 from fastapi import Depends, FastAPI, Request
 
-from . import auth, db, mahjong, saves
+from . import auth, db, mahjong, saves, sudoku
 from .config import Settings
 
 
@@ -30,6 +30,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.settings = settings
     saves.install(app)
     mahjong.install(app)
+    sudoku.install(app)
     auth.install(app)
 
     @app.get("/healthz")

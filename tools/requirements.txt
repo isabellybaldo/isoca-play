@@ -1,0 +1,2 @@
+# Only for `make_sudoku_pack.py --cross-check`. The pack and the grader need none of this.
+rustoku==0.16.0
