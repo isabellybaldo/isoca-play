@@ -3,7 +3,7 @@ import { CACHED_HEADER } from './offline';
 import type { Tile } from './mahjong/rules';
 import type { Puzzle } from './sudoku/rules';
 
-export type GameName = 'mahjong' | 'sudoku';
+export type GameName = 'mahjong' | 'solitaire' | 'sudoku';
 
 export class ApiError extends Error {
   status: number;
@@ -61,6 +61,11 @@ export async function newMahjong(layoutId: string): Promise<{ layout: string; ti
 // `not` is the board on screen, so a new game always changes it.
 export async function newSudoku(level: Level, not?: string): Promise<Puzzle> {
   return request('/api/new/sudoku', withJson('POST', { level, not }), (response) => checked(response).json());
+}
+
+// `not` is the deal on screen, so a new game always changes it.
+export async function newSolitaire(not?: number[]): Promise<{ deal: number[] }> {
+  return request('/api/new/solitaire', withJson('POST', { not }), (response) => checked(response).json());
 }
 
 // The server answers with a redirect, which is ours to follow, so a page of login

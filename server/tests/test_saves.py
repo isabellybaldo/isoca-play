@@ -33,6 +33,10 @@ def test_save_round_trip(client_logged_in):
     assert put(client_logged_in, "sudoku", json={"grid": "53..7"}).status_code == 204
     assert client_logged_in.get("/api/save/sudoku").json() == {"grid": "53..7"}
     assert client_logged_in.get("/api/save/mahjong").json() == body
+    assert client_logged_in.get("/api/save/solitaire").status_code == 204
+    assert put(client_logged_in, "solitaire", json={"deal": [3, 1, 2]}).status_code == 204
+    assert client_logged_in.get("/api/save/solitaire").json() == {"deal": [3, 1, 2]}
+    assert client_logged_in.get("/api/save/sudoku").json() == {"grid": "53..7"}
 
 
 def test_last_save_wins(client_logged_in, settings):

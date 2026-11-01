@@ -139,7 +139,7 @@ def test_server_header_is_off(http):
 
 LEFT_OUT = """
 import importlib.util, os
-names = {'.git', 'rustoku', 'make_sudoku_pack.py', 'sudoku_grader.py', 'write_deal_samples.py',
+names = {'.git', 'rustoku', 'make_sudoku_pack.py', 'make_solitaire_pack.py', 'sudoku_grader.py', 'write_deal_samples.py',
          'deal-samples.json', 'rule-cases.json', 'tip-cases.json', 'make_tip_cases.py', 'conftest.py',
          'solitaire_rules.py', 'make_solitaire_cases.py', 'solitaire-cases.json',
          'Dockerfile', 'pyproject.toml', 'requirements.txt', 'package-lock.json', 'node_modules'}

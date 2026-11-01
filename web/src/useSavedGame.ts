@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState, type SetStateAction } from 'react';
 import { ApiError, loadSave, putSave, type GameName } from './api';
 import { LAYOUTS } from './mahjong/layouts';
 import type { MahjongState } from './mahjong/rules';
+import type { SolitaireState } from './solitaire/rules';
 import type { SudokuState } from './sudoku/rules';
 
 // A mahjong save names its layout, and the app looks the shape up. A sudoku state
 // already holds its puzzle.
 export type MahjongSave = { layout: string; state: MahjongState };
-export type Saved = { mahjong: MahjongSave; sudoku: SudokuState };
+export type Saved = { mahjong: MahjongSave; solitaire: SolitaireState; sudoku: SudokuState };
 export type SaveStatus = 'saved' | 'retrying' | 'offline';
 
 const FIRST_WAIT = 1000;
@@ -68,8 +69,27 @@ function isPlayableSudoku(body: unknown): boolean {
   );
 }
 
+// Only the shape is checked here: the rules own what a legal position is.
+function isPlayableSolitaire(body: unknown): boolean {
+  if (!isRecord(body)) return false;
+  return (
+    isNumbers(body.deal) &&
+    body.deal.length === 52 &&
+    isNumbers(body.stock) &&
+    isNumbers(body.waste) &&
+    Array.isArray(body.columns) &&
+    body.columns.length === 7 &&
+    body.columns.every((c) => isRecord(c) && isNumbers(c.down) && isNumbers(c.up)) &&
+    isNumbers(body.foundations) &&
+    body.foundations.length === 4 &&
+    Array.isArray(body.history) &&
+    ['playing', 'won'].includes(body.status as string)
+  );
+}
+
 const PLAYABLE: Record<GameName, (body: unknown) => boolean> = {
   mahjong: isPlayableMahjong,
+  solitaire: isPlayableSolitaire,
   sudoku: isPlayableSudoku,
 };
 
@@ -82,6 +102,13 @@ const MOVED: { [G in GameName]: (a: Saved[G], b: Saved[G]) => boolean } = {
     a.state.onBoard !== b.state.onBoard ||
     a.state.slots !== b.state.slots ||
     a.state.history !== b.state.history,
+  solitaire: (a, b) =>
+    a.deal !== b.deal ||
+    a.stock !== b.stock ||
+    a.waste !== b.waste ||
+    a.columns !== b.columns ||
+    a.foundations !== b.foundations ||
+    a.history !== b.history,
   sudoku: (a, b) =>
     a.puzzle !== b.puzzle || a.values !== b.values || a.notes !== b.notes || a.history !== b.history,
 };
