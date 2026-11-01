@@ -158,7 +158,7 @@ game feels instant on a phone.
 - One account. No sign-up page. **(owner confirmed)**
 - Password, not GitHub. **(owner)**
 - Without a session, every path answers with the login page, or 401 for the API.
-  That includes all scripts, styles and tile art. **(owner confirmed)**
+  That includes all scripts and game code. The login page itself may show tile art. **(owner)**
 - The phone stays signed in for about 30 days, renewed on use. **(owner confirmed)**
   A log out button sits on the home page. **(call)**
 - Password is set on the box with one command run by the owner, which also ends all

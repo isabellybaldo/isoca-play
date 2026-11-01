@@ -19,7 +19,7 @@ Two repos: `isoca-play` (this one, branch `design-check`) and `isoca-infra` (new
 - One account, password only, no sign-up. At least 12 characters. Argon2id.
 - Session: about 30 days, renewed on use, 256-bit random token stored hashed. Cookie `__Host-session`: `Secure`, `HttpOnly`, `SameSite=Strict`, `Path=/`.
 - Block an IP for 15 minutes after 5 failures, plus a site-wide slowdown under wider attack. An existing session keeps working during a block.
-- Without a session, every path answers the login page, or 401 under `/api`. Only these are public: `/login`, `/login.css`, `/fonts/*`, `/healthz`. None holds tile art or game code.
+- Without a session, every path answers the login page, or 401 under `/api`. Only these are public: `/login`, `/login.css`, `/fonts/*`, `/healthz`. The login page may show tile art (owner); none of these holds game code.
 - Offline: play yes; saving, new games and logging in no. Logging out clears the device's copy.
 - Sudoku shows no mistake signal before the board is full.
 - No request to a third party.
@@ -30,7 +30,7 @@ Two repos: `isoca-play` (this one, branch `design-check`) and `isoca-infra` (new
 
 - **Sudoku pack:** the spec allows a pack or server generation. A committed pack of 300 puzzles per level means `rustoku` never enters the image, and new games are instant.
 - **The single-file build goes.** Its inline script and styles conflict with the strict CSP, and its reason, the artifact, is gone: the owner passed the design check locally.
-- **Public login assets:** the login page needs its own stylesheet and fonts before a session exists. They carry no game art.
+- **Public login assets:** the login page needs its own stylesheet and fonts before a session exists. They carry no game code. The owner wants the cute tiles on the login page, so it shows a few as inline SVG with no extra public path and no script.
 
 ## Review Focus
 
@@ -110,7 +110,7 @@ def test_no_rendered_public_file_mentions_game_code(client): ...
 
 - [ ] **Step 2: Run them to verify they fail.** Run: `cd server && python -m pytest -q tests/test_auth.py`. Expected: FAIL.
 
-- [ ] **Step 3: Implement.** Argon2 verify runs in a worker thread with a semaphore of 1, so a flood can't exhaust the 256 MB cap. Site-wide slowdown: above 20 failures an hour, process one login attempt per 5 seconds. Failures are stored, so a restart doesn't clear a block. The page uses the theme's colours and is a plain form with no script.
+- [ ] **Step 3: Implement.** Argon2 verify runs in a worker thread with a semaphore of 1, so a flood can't exhaust the 256 MB cap. Site-wide slowdown: above 20 failures an hour, process one login attempt per 5 seconds. Failures are stored, so a restart doesn't clear a block. The page uses the theme's colours, shows a few tiles from the approved set as inline SVG at whole-number scale, and is a plain form with no script.
 
 - [ ] **Step 4: Run them to verify they pass.** Expected: PASS.
 
