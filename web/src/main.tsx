@@ -1,4 +1,13 @@
+import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
+import '@fontsource/press-start-2p/400.css';
+import '@fontsource/vt323/400.css';
+import '@fontsource/ibm-plex-mono/400.css';
+import './theme.css';
+import App from './App';
 
-// Placeholder entry so the project is valid; the real app arrives in Task 4.
-createRoot(document.getElementById('root')!).render(<p>isoca play</p>);
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>,
+);
