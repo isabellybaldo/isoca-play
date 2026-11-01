@@ -81,6 +81,11 @@ export function tap(s: MahjongState, id: number): MahjongState {
   return { ...s, selected: id };
 }
 
+// A new deal would throw away work: there are moves, and the board is not cleared.
+export function hasMovesToLose(s: MahjongState): boolean {
+  return s.history.length > 0 && s.status !== 'won';
+}
+
 export function tapElsewhere(s: MahjongState): MahjongState {
   if (s.status !== 'playing' || s.selected === null) return s;
   return { ...s, selected: null };

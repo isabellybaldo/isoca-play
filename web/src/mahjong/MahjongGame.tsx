@@ -24,7 +24,7 @@ function viewportWidth(): number {
   return Math.min(document.documentElement.clientWidth || window.innerWidth, WIDEST_VIEWPORT);
 }
 
-function deal(layout: Layout): MahjongState {
+export function dealGame(layout: Layout): MahjongState {
   return newGame(makeDeal(layout, Math.floor(Math.random() * 2 ** 32)));
 }
 
@@ -119,8 +119,17 @@ function EndNote({ state }: { state: MahjongState }) {
   );
 }
 
-export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack: () => void }) {
-  const [state, setState] = useState(() => deal(layout));
+export default function MahjongGame({
+  layout,
+  state,
+  onChange,
+  onBack,
+}: {
+  layout: Layout;
+  state: MahjongState;
+  onChange: (update: (s: MahjongState) => MahjongState) => void;
+  onBack: () => void;
+}) {
   const [viewport, setViewport] = useState(viewportWidth);
   const [asking, setAsking] = useState(false);
 
@@ -130,6 +139,10 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
     return () => window.removeEventListener('resize', measure);
   }, []);
 
+  const newDeal = () => {
+    const next = dealGame(layout);
+    onChange(() => next);
+  };
   const width = tileWidth(layout, viewport);
   const box = boardBox(layout, width);
   // Lower layers first, and each row left to right, so upper tiles lie on top.
@@ -166,7 +179,7 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
           role="group"
           aria-label="Board"
           style={{ width: box.width, height: box.height }}
-          onClick={() => setState((s) => tapElsewhere(s))}
+          onClick={() => onChange(tapElsewhere)}
         >
           {tiles.map((tile) => (
             <BoardTile
@@ -175,7 +188,7 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
               tile={tile}
               width={width}
               {...tilePosition(tile, layout, width)}
-              onTap={(id) => setState((s) => tap(s, id))}
+              onTap={(id) => onChange((s) => tap(s, id))}
             />
           ))}
           <div role="status"><EndNote state={state} /></div>
@@ -186,7 +199,7 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
             type="button"
             className="back"
             disabled={state.history.length === 0}
-            onClick={() => setState((s) => undo(s))}
+            onClick={() => onChange(undo)}
           >
             Return
           </button>
@@ -195,7 +208,7 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
             className="back"
             onClick={() => {
               if (state.status === 'playing') setAsking(true);
-              else setState(deal(layout));
+              else newDeal();
             }}
           >
             New game
@@ -211,7 +224,7 @@ export default function MahjongGame({ layout, onBack }: { layout: Layout; onBack
           confirmLabel="Start new game"
           onKeep={() => setAsking(false)}
           onConfirm={() => {
-            setState(deal(layout));
+            newDeal();
             setAsking(false);
           }}
         />

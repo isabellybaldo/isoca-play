@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import ConfirmDialog from '../ConfirmDialog';
 import type { Level } from '../mahjong/layouts';
+import ResumeButton from '../ResumeButton';
 import { PUZZLES } from './puzzles';
-import { newSudoku, pressDigit, selectCell, setMode, undo, type Puzzle, type SudokuState } from './rules';
+import { hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, type Puzzle, type SudokuState } from './rules';
 import './sudoku.css';
 
 const LEVELS: { id: Level; name: string; line: string }[] = [
@@ -74,11 +75,22 @@ function Cell({ state, cell, onSelect }: { state: SudokuState; cell: number; onS
   );
 }
 
-function Game({ level, onLevels }: { level: Level; onLevels: () => void }) {
-  const [state, setState] = useState(() => newSudoku(pick(level)));
+function Game({
+  state,
+  onChange,
+  onLevels,
+}: {
+  state: SudokuState;
+  onChange: (update: (s: SudokuState) => SudokuState) => void;
+  onLevels: () => void;
+}) {
+  const level = state.puzzle.level;
   const [asking, setAsking] = useState(false);
   const won = state.status === 'won';
-  const deal = () => setState((s) => newSudoku(pick(level, s.puzzle)));
+  const deal = () => {
+    const next = newSudoku(pick(level, state.puzzle));
+    onChange(() => next);
+  };
   const name = LEVELS.find((l) => l.id === level)!.name;
 
   return (
@@ -101,7 +113,7 @@ function Game({ level, onLevels }: { level: Level; onLevels: () => void }) {
 
         <div className="sd-board" role="group" aria-label="Board">
           {state.values.map((_, cell) => (
-            <Cell key={cell} state={state} cell={cell} onSelect={(c) => setState((s) => selectCell(s, c))} />
+            <Cell key={cell} state={state} cell={cell} onSelect={(c) => onChange((s) => selectCell(s, c))} />
           ))}
         </div>
 
@@ -115,7 +127,7 @@ function Game({ level, onLevels }: { level: Level; onLevels: () => void }) {
               type="button"
               className="sd-mode"
               aria-pressed={state.mode === 'write'}
-              onClick={() => setState((s) => setMode(s, 'write'))}
+              onClick={() => onChange((s) => setMode(s, 'write'))}
             >
               Write
             </button>
@@ -123,7 +135,7 @@ function Game({ level, onLevels }: { level: Level; onLevels: () => void }) {
               type="button"
               className="sd-mode"
               aria-pressed={state.mode === 'notes'}
-              onClick={() => setState((s) => setMode(s, 'notes'))}
+              onClick={() => onChange((s) => setMode(s, 'notes'))}
             >
               Notes
             </button>
@@ -132,7 +144,7 @@ function Game({ level, onLevels }: { level: Level; onLevels: () => void }) {
             type="button"
             className="back"
             disabled={state.history.length === 0 || won}
-            onClick={() => setState((s) => undo(s))}
+            onClick={() => onChange(undo)}
           >
             Return
           </button>
@@ -140,7 +152,7 @@ function Game({ level, onLevels }: { level: Level; onLevels: () => void }) {
 
         <div className={state.mode === 'notes' ? 'sd-pad is-notes' : 'sd-pad'} role="group" aria-label="Numbers">
           {DIGITS.map((d) => (
-            <button key={d} type="button" onClick={() => setState((s) => pressDigit(s, d))}>
+            <button key={d} type="button" onClick={() => onChange((s) => pressDigit(s, d))}>
               {d}
             </button>
           ))}
@@ -164,23 +176,68 @@ function Game({ level, onLevels }: { level: Level; onLevels: () => void }) {
   );
 }
 
-export default function SudokuGame({ onBack }: { onBack: () => void }) {
-  const [level, setLevel] = useState<Level | null>(null);
+export default function SudokuGame({
+  game,
+  onGame,
+  onBack,
+}: {
+  game: SudokuState | null;
+  onGame: Dispatch<SetStateAction<SudokuState | null>>;
+  onBack: () => void;
+}) {
+  const [playing, setPlaying] = useState(false);
+  const [replacing, setReplacing] = useState<Level | null>(null);
 
-  if (level) return <Game level={level} onLevels={() => setLevel(null)} />;
+  if (playing && game) {
+    return <Game state={game} onChange={(update) => onGame((g) => g && update(g))} onLevels={() => setPlaying(false)} />;
+  }
+
+  const start = (level: Level) => {
+    onGame(newSudoku(pick(level)));
+    setPlaying(true);
+  };
   return (
-    <main className="shell sd-setup">
-      <button type="button" className="back" onClick={onBack}>Back to home</button>
-      <h1 className="sd-title">Sudoku</h1>
-      <div className="sd-levels" role="group" aria-label="Difficulty">
-        {LEVELS.map((l) => (
-          <button key={l.id} type="button" className="sd-levelbtn" aria-label={l.name} onClick={() => setLevel(l.id)}>
-            <span className="sd-levelname">{l.name}</span>
-            <span className="sd-levelline">{l.line}</span>
-          </button>
-        ))}
-      </div>
-      <p className="sd-hint">Tap a level to start.</p>
-    </main>
+    <>
+      <main className="shell sd-setup" inert={replacing !== null}>
+        <button type="button" className="back" onClick={onBack}>Back to home</button>
+        <h1 className="sd-title">Sudoku</h1>
+        {game && (
+          <ResumeButton
+            name={LEVELS.find((l) => l.id === game.puzzle.level)!.name}
+            moves={game.history.length}
+            onResume={() => setPlaying(true)}
+          />
+        )}
+        <div className="sd-levels" role="group" aria-label="Difficulty">
+          {LEVELS.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              className="sd-levelbtn"
+              aria-label={l.name}
+              onClick={() => (game && hasMovesToLose(game) ? setReplacing(l.id) : start(l.id))}
+            >
+              <span className="sd-levelname">{l.name}</span>
+              <span className="sd-levelline">{l.line}</span>
+            </button>
+          ))}
+        </div>
+        <p className="sd-hint">Tap a level to start.</p>
+      </main>
+
+      {replacing && (
+        <ConfirmDialog
+          title="Start a new game?"
+          line="This game will be lost."
+          keepLabel="Keep playing"
+          confirmLabel="Start new game"
+          onKeep={() => setReplacing(null)}
+          onConfirm={() => {
+            start(replacing);
+            setReplacing(null);
+          }}
+        />
+      )}
+    </>
   );
 }

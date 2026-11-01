@@ -55,6 +55,8 @@ button {
 }
 .back:active { transform: translate(3px, 3px); box-shadow: none; }
 
+.back.resume { display: block; width: calc(100% - 3px); min-height: var(--tap); margin-bottom: 16px; text-align: left; line-height: 1.5; }
+
 /* A tile: the pale face and hard shadow around a drawing. Sized by its parent;
    a board tile may be narrower than --tap, so it opts out of the button floor. */
 .pixels { display: block; width: 100%; height: auto; }

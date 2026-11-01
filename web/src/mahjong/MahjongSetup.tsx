@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { layoutsFor, type Layout, type Level } from './layouts';
 import './mahjong.css';
 
@@ -40,19 +41,24 @@ export default function MahjongSetup({
   onLevel,
   onStart,
   onBack,
+  inert,
+  resume,
 }: {
   level: Level;
   onLevel: (level: Level) => void;
   onStart: (layout: Layout) => void;
   onBack: () => void;
+  inert?: boolean;
+  resume?: ReactNode;
 }) {
   const types = layoutsFor(level);
   const current = LEVELS.find((l) => l.id === level)!;
 
   return (
-    <main className="shell mj-setup">
+    <main className="shell mj-setup" inert={inert}>
       <button type="button" className="back" onClick={onBack}>Back to home</button>
       <h1 className="mj-title">Mahjong</h1>
+      {resume}
 
       <div className="mj-levels" role="group" aria-label="Difficulty">
         {LEVELS.map((l) => (

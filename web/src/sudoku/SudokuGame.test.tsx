@@ -1,8 +1,9 @@
+import { useState } from 'react';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
 import { PUZZLES } from './puzzles';
-import type { Puzzle } from './rules';
+import type { Puzzle, SudokuState } from './rules';
 import SudokuGame from './SudokuGame';
 
 // Three small puzzles: the real first easy solution with three squares blanked.
@@ -28,10 +29,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// The game itself lives above the screen; this stands in for App.
+function Holder({ onBack }: { onBack: () => void }) {
+  const [game, setGame] = useState<SudokuState | null>(null);
+  return <SudokuGame game={game} onGame={setGame} onBack={onBack} />;
+}
+
 async function start(level = 'Easy') {
   vi.spyOn(Math, 'random').mockReturnValue(0);
   const onBack = vi.fn();
-  render(<SudokuGame onBack={onBack} />);
+  render(<Holder onBack={onBack} />);
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: level }));
   return { user, onBack };
@@ -59,7 +66,7 @@ async function fill(user: User, blanks: number[], digit: (cell: number) => numbe
 describe('level choice', () => {
   test('starts with the three levels, and back leaves', async () => {
     const onBack = vi.fn();
-    render(<SudokuGame onBack={onBack} />);
+    render(<Holder onBack={onBack} />);
     expect(screen.getByRole('heading', { name: 'Sudoku' })).toBeTruthy();
     for (const level of ['Easy', 'Medium', 'Hard']) expect(screen.getByRole('button', { name: level })).toBeTruthy();
     expect(screen.queryByRole('group', { name: 'Board' })).toBeNull();

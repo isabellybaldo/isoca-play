@@ -31,6 +31,11 @@ function statusOf(p: Puzzle, values: number[]): SudokuState['status'] {
   return values.join('') === p.solution ? 'won' : 'unsolved';
 }
 
+// A new deal would throw away work: there are moves, and the board is not solved.
+export function hasMovesToLose(s: SudokuState): boolean {
+  return s.history.length > 0 && s.status !== 'won';
+}
+
 export function selectCell(s: SudokuState, cell: number): SudokuState {
   return { ...s, selected: cell };
 }

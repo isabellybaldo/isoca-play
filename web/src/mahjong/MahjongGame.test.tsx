@@ -1,11 +1,12 @@
+import { useState } from 'react';
 import { cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { makeDeal } from './deal';
 import { LAYOUTS, layoutsFor, type Layout } from './layouts';
-import MahjongGame from './MahjongGame';
+import MahjongGame, { dealGame } from './MahjongGame';
 import MahjongSetup from './MahjongSetup';
-import type { Tile } from './rules';
+import type { MahjongState, Tile } from './rules';
 
 vi.mock('./deal', () => ({ makeDeal: vi.fn() }));
 
@@ -31,11 +32,18 @@ function tile(id: number, face: string, x: number, y = 0, z = 0): Tile {
 // Tiles two apart in x would touch, so four apart keeps every tile free.
 const apart = (faces: string[]): Tile[] => faces.map((face, i) => tile(i, face, i * 4));
 
+// The game itself lives above the screen; this stands in for App.
 function play(tiles: Tile[]) {
   vi.mocked(makeDeal).mockReturnValue(tiles);
   const onBack = vi.fn();
-  const view = render(<MahjongGame layout={layout} onBack={onBack} />);
-  return { user: userEvent.setup(), onBack, ...view };
+  const held: { state?: MahjongState } = {};
+  function Holder() {
+    const [state, setState] = useState(() => dealGame(layout));
+    held.state = state;
+    return <MahjongGame layout={layout} state={state} onChange={setState} onBack={onBack} />;
+  }
+  const view = render(<Holder />);
+  return { user: userEvent.setup(), onBack, held, ...view };
 }
 
 const tileButton = (name: string) => screen.getByRole('button', { name });
@@ -308,11 +316,14 @@ describe('leaving and starting over', () => {
     expect(makeDeal).toHaveBeenCalledWith(layout, 2 ** 30);
   });
 
-  test('back leaves at once, with no question', async () => {
-    const { user, onBack } = play(apart(['moon', 'sun']));
+  test('back leaves at once, with no question, and the game stays as it was', async () => {
+    const { user, onBack, held } = play(apart(['moon', 'sun']));
     await user.dblClick(tileButton('Moon tile'));
+    const before = held.state;
     await user.click(screen.getByRole('button', { name: 'Back to setup' }));
     expect(onBack).toHaveBeenCalledOnce();
     expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(held.state).toBe(before);
+    expect(held.state!.slots).toHaveLength(1);
   });
 });
