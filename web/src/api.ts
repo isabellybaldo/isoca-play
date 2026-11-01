@@ -1,4 +1,5 @@
 import type { Level } from './mahjong/layouts';
+import { CACHED_HEADER } from './offline';
 import type { Tile } from './mahjong/rules';
 import type { Puzzle } from './sudoku/rules';
 
@@ -36,11 +37,16 @@ const withJson = (method: string, body: unknown): RequestInit => ({
   body: JSON.stringify(body),
 });
 
-// The saved game, or null when there is none yet.
-export async function loadSave(game: GameName): Promise<unknown> {
-  return request(`/api/save/${game}`, {}, (response) => {
+// The saved game, or null when there is none yet. `cached` says the worker answered from
+// the device because the network could not: the last save the server confirmed, which is
+// not news about the server. No network and nothing kept is a failure, not a null.
+export async function loadSave(game: GameName): Promise<{ body: unknown; cached: boolean }> {
+  return request(`/api/save/${game}`, {}, async (response) => {
     checked(response);
-    return response.status === 204 ? null : response.json();
+    return {
+      body: response.status === 204 ? null : await response.json(),
+      cached: response.headers.has(CACHED_HEADER),
+    };
   });
 }
 

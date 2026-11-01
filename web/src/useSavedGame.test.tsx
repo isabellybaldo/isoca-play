@@ -1,5 +1,5 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
-import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { blanked, fakeServer, goOffline } from './fakeServer.testutil';
 import { LAYOUTS } from './mahjong/layouts';
 import { isFree, newGame, tap, tapElsewhere } from './mahjong/rules';
@@ -452,4 +452,145 @@ test('flush says no at once when the server has refused the save', async () => {
   act(() => result.current.setState(game(1)));
   await pass();
   await expect(result.current.flush()).resolves.toBe(false);
+});
+
+describe('offline, with the worker answering', () => {
+  // A move, by the identity the rules keep: game(n) alone only moves the selection.
+  const move = (n: number) => ({ ...game(n), history: [] });
+
+  test('a fresh load with no network and nothing kept is not "no saved game"', async () => {
+    const server = fakeServer({ sudoku: game(7) });
+    server.worker = {};
+    goOffline();
+    const { result } = await opened();
+    expect(result.current.ready).toBe(false);
+    expect(result.current.state).toBeNull();
+    expect(result.current.saving).toBe('offline');
+    act(() => result.current.setState(move(1))); // nothing can replace the unseen save
+    await pass(60_000);
+    expect(server.puts('sudoku')).toEqual([]);
+
+    server.worker = null;
+    await act(async () => goOffline(false));
+    await pass();
+    expect(result.current.state).toEqual(game(7));
+    expect(result.current.ready).toBe(true);
+    expect(server.puts('sudoku')).toEqual([]);
+  });
+
+  test('a fresh load takes the kept save, says it is not saving, and writes nothing', async () => {
+    const server = fakeServer();
+    server.worker = { sudoku: game(7) };
+    const { result } = await opened();
+    expect(result.current.state).toEqual(game(7));
+    expect(result.current.ready).toBe(true);
+    expect(result.current.saving).toBe('offline');
+    await pass(120_000);
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    await pass(120_000);
+    expect(server.puts('sudoku')).toEqual([]);
+  });
+
+  test('a kept "no save" is a real answer: no game, and nothing written', async () => {
+    const server = fakeServer();
+    server.worker = { sudoku: null };
+    const { result } = await opened();
+    expect(result.current.state).toBeNull();
+    expect(result.current.ready).toBe(true);
+    expect(result.current.unplayable).toBe(false);
+    expect(server.puts('sudoku')).toEqual([]);
+  });
+
+  test('back online after a kept load with no moves, the server wins and nothing is written', async () => {
+    const server = fakeServer({ sudoku: game(9) });
+    server.worker = { sudoku: game(7) };
+    goOffline();
+    const { result } = await opened();
+    expect(result.current.state).toEqual(game(7));
+
+    server.worker = null;
+    await act(async () => goOffline(false));
+    await pass();
+    expect(result.current.state).toEqual(game(9));
+    expect(result.current.saving).toBe('saved');
+    expect(server.puts('sudoku')).toEqual([]);
+    expect(server.saves.sudoku).toEqual(game(9));
+  });
+
+  test('back online after a kept load with the same save, nothing is written and the marker clears', async () => {
+    const server = fakeServer({ sudoku: game(7) });
+    server.worker = { sudoku: game(7) };
+    const { result } = await opened();
+    server.worker = null;
+    await act(async () => window.dispatchEvent(new Event('online')));
+    await pass();
+    expect(result.current.saving).toBe('saved');
+    expect(server.puts('sudoku')).toEqual([]);
+  });
+
+  test('a real move after a kept load goes out when the connection returns: that move, once', async () => {
+    const server = fakeServer({ sudoku: game(7) });
+    server.worker = { sudoku: game(7) };
+    goOffline();
+    const { result } = await opened();
+    act(() => result.current.setState(move(1)));
+    await pass();
+    expect(result.current.saving).toBe('offline');
+
+    server.worker = null;
+    await act(async () => goOffline(false));
+    await pass();
+    // Tries that failed while offline are seen too. Each is the move; none is the load.
+    expect(server.puts('sudoku').length).toBeGreaterThan(0);
+    for (const sent of server.puts('sudoku')) expect(sent).toEqual(move(1));
+    expect(server.saves.sudoku).toEqual(move(1));
+    expect(result.current.saving).toBe('saved');
+  });
+
+  test('a check answered from the cache never rolls back moves the server has', async () => {
+    const server = fakeServer({ sudoku: game(1) });
+    const { result } = await opened();
+    act(() => result.current.setState(move(2)));
+    await pass();
+    expect(server.puts('sudoku')).toEqual([move(2)]);
+
+    server.worker = { sudoku: game(1) }; // an older answer
+    await act(async () => window.dispatchEvent(new Event('focus')));
+    await pass();
+    expect(result.current.state).toEqual(move(2));
+    expect(result.current.saving).toBe('offline');
+    expect(server.puts('sudoku')).toEqual([move(2)]);
+  });
+
+  test('when the first check after coming back fails, it tries again and the marker clears', async () => {
+    const server = fakeServer({ sudoku: game(7) });
+    server.worker = { sudoku: game(7) };
+    const { result } = await opened();
+    // The browser says online, and the first request still only reaches the cache.
+    await act(async () => window.dispatchEvent(new Event('online')));
+    await pass();
+    expect(result.current.saving).toBe('offline');
+
+    server.worker = null;
+    await pass(30_000);
+    expect(result.current.saving).toBe('saved');
+    expect(server.puts('sudoku')).toEqual([]);
+
+    const asked = server.requests.length;
+    await pass(120_000); // a real answer ends the asking
+    expect(server.requests.length).toBe(asked);
+  });
+
+  test('a load from the cache does not tell the other tabs to try', async () => {
+    const server = fakeServer({ sudoku: game(1) });
+    const first = await opened();
+    server.worker = { sudoku: game(1) };
+    const before = server.requests.length;
+    const second = await opened();
+    await pass();
+    // Only the second tab's own load: the first was not woken by it.
+    expect(server.requests.length).toBe(before + 1);
+    first.unmount();
+    second.unmount();
+  });
 });

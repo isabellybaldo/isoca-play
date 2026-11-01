@@ -33,11 +33,13 @@ function SudokuArt() {
 export default function Home({
   onOpen,
   onLogOut,
+  logOutDisabled,
   note,
   inert,
 }: {
   onOpen: (screen: Screen) => void;
   onLogOut: () => void;
+  logOutDisabled: boolean;
   note: string;
   inert?: boolean;
 }) {
@@ -57,7 +59,7 @@ export default function Home({
         </button>
       </div>
       <div className="home-foot">
-        <button type="button" className="back" onClick={onLogOut}>Log out</button>
+        <button type="button" className="back" disabled={logOutDisabled} onClick={onLogOut}>Log out</button>
         {note && <p className="start-note" aria-live="polite">{note}</p>}
       </div>
     </main>

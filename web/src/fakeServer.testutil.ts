@@ -54,6 +54,9 @@ export function fakeServer(saves: Record<string, unknown> = {}) {
     requests: [] as Seen[],
     answer: null as null | ((seen: Seen) => number | undefined),
     gate: null as null | Promise<unknown>, // a request waits here before it is answered
+    // The network is gone and the worker answers: a game here comes back marked as
+    // cached (null for a cached "no save"), any other request fails as a network failure.
+    worker: null as null | Record<string, unknown>,
     puts: (game: string) =>
       server.requests.filter((r) => r.method === 'PUT' && r.path === `/api/save/${game}`).map((r) => r.body),
   };
@@ -65,6 +68,15 @@ export function fakeServer(saves: Record<string, unknown> = {}) {
     const seen: Seen = { method, path, body };
     server.requests.push(seen);
     if (server.gate) await server.gate;
+    if (server.worker) {
+      const game = /^\/api\/save\/(\w+)$/.exec(path)?.[1];
+      if (method !== 'GET' || !game || !(game in server.worker)) throw new TypeError('Failed to fetch');
+      const kept = server.worker[game];
+      const headers = { 'Content-Type': 'application/json', 'X-Isoca-Cached': '1' };
+      return kept === null
+        ? new Response(null, { status: 204, headers })
+        : new Response(JSON.stringify(kept), { status: 200, headers });
+    }
     const refused = server.answer?.(seen);
     if (refused !== undefined) return json({ detail: 'refused' }, refused);
 

@@ -7,6 +7,7 @@ import { LAYOUTS, type Layout, type Level } from './mahjong/layouts';
 import MahjongGame from './mahjong/MahjongGame';
 import MahjongSetup from './mahjong/MahjongSetup';
 import { hasMovesToLose, newGame, type MahjongState } from './mahjong/rules';
+import { clearDevice } from './offline';
 import ResumeButton from './ResumeButton';
 import SaveMarker from './SaveMarker';
 import SudokuGame from './sudoku/SudokuGame';
@@ -129,10 +130,6 @@ export default function App() {
   const goHome = () => setScreen('home');
 
   const logOut = async () => {
-    if (!online) {
-      setLogoutNote(LOGOUT_OFFLINE);
-      return;
-    }
     // A save still on its way would otherwise arrive after the session has ended.
     setLogoutNote('Saving your last moves.');
     const sent = await Promise.all([mahjong.flush(), sudoku.flush()]);
@@ -144,10 +141,14 @@ export default function App() {
   const endSession = async () => {
     try {
       await logout();
-      goToLogin();
     } catch {
-      setLogoutNote(navigator.onLine === false ? LOGOUT_OFFLINE : LOGOUT_FAILED);
+      setLogoutNote(LOGOUT_FAILED);
+      return;
     }
+    // Only a log out the server took: the session can't be ended offline, so the game
+    // stays on the device until it can.
+    await clearDevice();
+    goToLogin();
   };
 
   let shown;
@@ -180,7 +181,15 @@ export default function App() {
       </GameBoundary>
     );
   } else {
-    shown = <Home onOpen={setScreen} onLogOut={() => void logOut()} note={logoutNote} inert={askingLogout} />;
+    shown = (
+      <Home
+        onOpen={setScreen}
+        onLogOut={() => void logOut()}
+        logOutDisabled={!online}
+        note={online ? logoutNote : LOGOUT_OFFLINE}
+        inert={askingLogout}
+      />
+    );
   }
 
   const worst = [mahjong.saving, sudoku.saving];
@@ -188,8 +197,8 @@ export default function App() {
     <>
       {shown}
       <SaveMarker
-        saving={worst.includes('offline') ? 'offline' : worst.includes('retrying') ? 'retrying' : 'saved'}
-        signedOut={mahjong.signedOut || sudoku.signedOut}
+        saving={!online || worst.includes('offline') ? 'offline' : worst.includes('retrying') ? 'retrying' : 'saved'}
+        signedOut={online && (mahjong.signedOut || sudoku.signedOut)}
         refused={mahjong.refused || sudoku.refused}
         checking={mahjong.checking || sudoku.checking}
       />

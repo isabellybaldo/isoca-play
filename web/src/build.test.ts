@@ -61,6 +61,14 @@ describe('the built site', () => {
     expect(css.match(/@font-face/g)).toHaveLength(3);
   });
 
+  test('writes the asset list and a version into the worker, and leaves no placeholder', () => {
+    const worker = readFileSync(join(outDir, 'sw.js'), 'utf8');
+    expect(worker).not.toContain('__SW_');
+    expect(worker).toMatch(/const VERSION = '[0-9a-f]{16}';/);
+    const listed = JSON.parse(/const ASSETS = (\[.*?\]);/.exec(worker)![1]) as string[];
+    expect(listed).toEqual(assets.map((f) => `/assets/${f}`).sort());
+  });
+
   test('carries no sudoku puzzle or local deal', () => {
     const js = assetText('.js').join('');
     // A solution from the old starter set, and the deal's seeded random number.

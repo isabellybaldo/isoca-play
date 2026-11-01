@@ -123,6 +123,12 @@ type Screen<G extends GameName> = {
 // had newer ones. A page with unsent moves stores them, even over newer ones: last save
 // wins.
 //
+// An answer from the worker's cache is only ever a starting point. On a load it shows the
+// last confirmed game and says so, and nothing is unsent, so nothing goes back to the
+// server. On a check it is ignored: it can only be as old as what this tab has, or older.
+// Until a real answer comes, this tab keeps asking with a growing wait: the first request
+// after a connection returns can fail, and no further wake may come.
+//
 // Tabs tell each other two things. "loaded": a tab has just opened, perhaps after a log
 // in, so one waiting with unsent moves tries now. "saved": there is something new to
 // fetch. In that order, a tab opened to log in ends up with the moves of the tab that
@@ -144,6 +150,9 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
   let mounted = false;
   let failures = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let fromCache = false; // the last thing heard came from the device, not the server
+  let checks = 0;
+  let checkTimer: ReturnType<typeof setTimeout> | undefined;
   let channel: BroadcastChannel | undefined;
   let held: Action[] = [];
   const waiting: ((sent: boolean) => void)[] = [];
@@ -155,6 +164,23 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
   const stopTimer = () => {
     clearTimeout(timer);
     timer = undefined;
+  };
+
+  const heardFromCache = () => {
+    fromCache = true;
+    screen.saving('offline');
+    askAgainLater();
+  };
+  const heardFromServer = () => {
+    fromCache = false;
+    checks = 0;
+    clearTimeout(checkTimer);
+  };
+  const askAgainLater = () => {
+    clearTimeout(checkTimer);
+    if (!mounted) return;
+    checkTimer = setTimeout(() => void refresh(), Math.min(FIRST_WAIT * 2 ** checks, LONGEST_WAIT));
+    checks += 1;
   };
 
   const finish = () => {
@@ -189,7 +215,8 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     stopTimer();
     if (busy || (ready && !unsent)) return;
     busy = true;
-    let posting: 'loaded' | 'saved';
+    let posting: 'loaded' | 'saved' | null;
+    let cachedAnswer = false;
     try {
       if (ready) {
         unsent = false;
@@ -203,7 +230,8 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
         savedText = text;
         posting = 'saved';
       } else {
-        const body = await loadSave(game);
+        const { body, cached } = await loadSave(game);
+        cachedAnswer = cached;
         savedText = JSON.stringify(body);
         const good = playable(body);
         state = good ? (body as State) : null;
@@ -211,7 +239,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
         screen.show(state);
         screen.unplayable(body !== null && !good);
         screen.ready();
-        posting = 'loaded';
+        posting = cached ? null : 'loaded'; // the other tabs would not reach the server either
       }
     } catch (error) {
       failed(error);
@@ -221,9 +249,14 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     failures = 0;
     refused = false;
     screen.refused(false);
-    screen.saving('saved');
-    screen.signedOut(false);
-    post(posting);
+    if (cachedAnswer) {
+      heardFromCache();
+    } else {
+      heardFromServer();
+      screen.saving('saved');
+      screen.signedOut(false);
+    }
+    if (posting) post(posting);
     finish();
   }
 
@@ -239,9 +272,9 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     const note = setTimeout(() => screen.checking(true), CHECKING_NOTE_AFTER);
     let adopted = false;
     try {
-      const body = await loadSave(game);
+      const { body, cached } = await loadSave(game);
       const text = JSON.stringify(body);
-      if (body !== null && text !== savedText) {
+      if (!cached && body !== null && text !== savedText) {
         savedText = text;
         if (playable(body)) {
           state = body as State;
@@ -252,10 +285,17 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
           screen.unplayable(true);
         }
       }
-      screen.signedOut(false);
+      if (cached) {
+        heardFromCache();
+      } else {
+        heardFromServer();
+        screen.saving('saved');
+        screen.signedOut(false);
+      }
     } catch (error) {
       // No answer: this tab carries on with what it has, and the next wake asks again.
       if (error instanceof ApiError && error.status === 401) screen.signedOut(true);
+      if (fromCache) askAgainLater();
     }
     clearTimeout(note);
     screen.checking(false);
@@ -317,6 +357,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     stop() {
       mounted = false;
       stopTimer();
+      clearTimeout(checkTimer);
       channel?.close();
       channel = undefined;
       window.removeEventListener('online', wake);

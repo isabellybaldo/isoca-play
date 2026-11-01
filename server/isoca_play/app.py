@@ -3,13 +3,21 @@
 from __future__ import annotations
 
 import sqlite3
+from pathlib import PurePath
 from typing import Iterator
 
 from fastapi import Depends, FastAPI, Request
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from . import auth, db, mahjong, saves, sudoku
 from .config import Settings
+
+# Hashed names never change their content. Everything else, the entry page and the
+# worker included, is asked about every time, so a new release is seen at the next load.
+IMMUTABLE = "private, max-age=31536000, immutable"
+REVALIDATE = "no-cache"
 
 
 class _Build(StaticFiles):
@@ -18,6 +26,13 @@ class _Build(StaticFiles):
 
     async def check_config(self) -> None:
         pass
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if response.status_code in (200, 304):
+            hashed = PurePath(path).parts[:1] == ("assets",)
+            response.headers["Cache-Control"] = IMMUTABLE if hashed else REVALIDATE
+        return response
 
 
 def get_settings(request: Request) -> Settings:

@@ -383,7 +383,10 @@ def logout(request: Request) -> Response:
         )
     finally:
         conn.close()
-    response = RedirectResponse("/login", 303, headers=NO_STORE)
+    # The page clears its worker and caches too, but only the browser can drop the HTTP
+    # cache, where the immutable game code would otherwise still be served.
+    headers = {**NO_STORE, "Clear-Site-Data": '"cache", "storage"'}
+    response = RedirectResponse("/login", 303, headers=headers)
     response.headers.append("set-cookie", _ended_cookie())
     return response
 

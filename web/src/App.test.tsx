@@ -7,6 +7,7 @@ import { blanked, fakeServer, goOffline } from './fakeServer.testutil';
 import { newSudoku } from './sudoku/rules';
 import { newGame } from './mahjong/rules';
 import { LAYOUTS } from './mahjong/layouts';
+import * as offline from './offline';
 
 // A real navigation is the one thing jsdom cannot do.
 vi.mock('./api', async (importOriginal) => ({
@@ -460,15 +461,79 @@ describe('the server', () => {
     expect(screen.queryByText('The saved game could not be opened.')).toBeNull();
   });
 
-  test('log out offline says it cannot, and stays', async () => {
-    const user = userEvent.setup();
+  test('log out offline is disabled with a short note, and clears nothing', async () => {
+    const clear = vi.spyOn(offline, 'clearDevice');
     await open();
     goOffline();
     await settle();
-    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    expect((screen.getByRole('button', { name: 'Log out' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('Logging out needs a connection.')).toBeTruthy();
     expect(server.requests.some((r) => r.path === '/logout')).toBe(false);
     expect(goToLogin).not.toHaveBeenCalled();
+    expect(clear).not.toHaveBeenCalled();
+
+    await act(async () => goOffline(false));
+    await settle();
+    expect((screen.getByRole('button', { name: 'Log out' }) as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.queryByText('Logging out needs a connection.')).toBeNull();
+  });
+
+  test('log out ends the session, then clears the device, then goes to login', async () => {
+    const user = userEvent.setup();
+    const order: string[] = [];
+    vi.spyOn(offline, 'clearDevice').mockImplementation(async () => {
+      order.push(`clear after ${server.requests.at(-1)?.path}`);
+    });
+    vi.mocked(goToLogin).mockImplementation(() => void order.push('login'));
+    await open();
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await settle();
+    expect(order).toEqual(['clear after /logout', 'login']);
+  });
+
+  test('a log out the server did not take leaves the device as it is', async () => {
+    const user = userEvent.setup();
+    const clear = vi.spyOn(offline, 'clearDevice');
+    await open();
+    server.answer = ({ path }) => (path === '/logout' ? 503 : undefined);
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await settle();
+    expect(clear).not.toHaveBeenCalled();
+    expect(goToLogin).not.toHaveBeenCalled();
+  });
+
+  test('offline the marker shows with nothing waiting', async () => {
+    const { container } = await open();
+    goOffline();
+    await settle();
+    expect(container.querySelector('.save-marker')!.textContent).toBe('Offline, not saved yet.');
+
+    await act(async () => goOffline(false));
+    await settle();
+    expect(container.querySelector('.save-marker')).toBeNull();
+  });
+
+  test('a page told it is signed out offers no log in while offline', async () => {
+    const user = userEvent.setup();
+    const { container } = await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    server.answer = ({ method }) => (method === 'PUT' ? 401 : undefined);
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await settle();
+    expect(container.querySelector('.save-marker a')).toBeTruthy();
+
+    goOffline();
+    await settle();
+    expect(container.querySelector('.save-marker a')).toBeNull();
+    expect(container.querySelector('.save-marker')!.textContent).toBe('Offline, not saved yet.');
+  });
+
+  test('a load answered from the cache shows the marker, even if the browser says online', async () => {
+    server.worker = { sudoku: null, mahjong: null };
+    const { container } = await open();
+    expect(container.querySelector('.save-marker')!.textContent).toBe('Offline, not saved yet.');
+    expect(server.requests.some((r) => r.method === 'PUT')).toBe(false);
   });
 });
 

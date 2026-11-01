@@ -150,3 +150,68 @@ def test_signed_out_with_our_origin_goes_to_login(client, built, method, path):
 @pytest.mark.parametrize("method", ["PUT", "POST"])
 def test_signed_out_under_api_is_a_401(client, method):
     assert client.request(method, "/api/x", headers=OWN).status_code == 401
+
+
+# The offline worker, and what the browser may keep.
+
+IMMUTABLE_ASSET = "/assets/app-abc123.js"
+
+
+@pytest.fixture
+def worker(built):
+    (built / "sw.js").write_text("// the worker", encoding="utf-8")
+    return built
+
+
+def test_the_worker_needs_a_session(client, worker):
+    r = client.get("/sw.js", follow_redirects=False)
+    assert r.status_code == 302 and r.headers["location"] == "/login"
+    assert "the worker" not in r.text
+
+
+def test_the_worker_is_served_at_the_root_as_script(signed_in, worker):
+    r = signed_in.get("/sw.js")
+    assert r.status_code == 200 and r.text == "// the worker"
+    assert "javascript" in r.headers["content-type"]
+
+
+def test_hashed_assets_are_immutable(signed_in):
+    r = signed_in.get(IMMUTABLE_ASSET)
+    assert "immutable" in r.headers["cache-control"]
+    assert "max-age=31536000" in r.headers["cache-control"]
+
+
+@pytest.mark.parametrize("path", ["/", "/index.html", "/sw.js"])
+def test_the_entry_points_are_always_revalidated(signed_in, worker, path):
+    r = signed_in.get(path, follow_redirects=True)
+    assert r.status_code == 200
+    assert r.headers["cache-control"] == "no-cache"
+
+
+@pytest.mark.parametrize(
+    "path, expected",
+    [("/", "no-cache"), ("/sw.js", "no-cache"), (IMMUTABLE_ASSET, "immutable")],
+)
+def test_a_revalidated_file_keeps_its_cache_header(signed_in, worker, path, expected):
+    etag = signed_in.get(path).headers["etag"]
+    r = signed_in.get(path, headers={"If-None-Match": etag})
+    assert r.status_code == 304
+    assert expected in r.headers["cache-control"]
+
+
+def test_a_missing_asset_is_not_marked_immutable(signed_in):
+    r = signed_in.get("/assets/nope.js")
+    assert r.status_code == 404
+    assert "immutable" not in r.headers.get("cache-control", "")
+
+
+@pytest.mark.parametrize("path", ["/", IMMUTABLE_ASSET, "/sw.js"])
+def test_no_session_redirect_is_not_kept(client, worker, path):
+    r = client.get(path, follow_redirects=False)
+    assert r.status_code == 302 and r.headers["cache-control"] == "no-store"
+
+
+def test_log_out_tells_the_browser_to_forget_the_site(signed_in):
+    r = signed_in.post("/logout", headers=OWN, follow_redirects=False)
+    assert r.status_code == 303
+    assert r.headers["clear-site-data"] == '"cache", "storage"'
