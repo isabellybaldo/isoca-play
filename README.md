@@ -73,6 +73,10 @@ Tests:
 
 The image is built from the repository root: `docker build --build-arg VERSION=dev .`
 
+## AI disclosure
+
+**AI disclosure.** This project was built with Claude Code, Anthropic's AI coding agent, which wrote most of the code, tests, docs and art. I chose what to build, made the design calls and approved the results, and I'm responsible for what's here.
+
 ## Licences
 
 The code and art are under the MIT licence, see [LICENSE](LICENSE).
