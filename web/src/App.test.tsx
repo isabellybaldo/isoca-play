@@ -1,13 +1,46 @@
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { goToLogin } from './api';
 import App from './App';
+import { blanked, fakeServer, goOffline } from './fakeServer.testutil';
+import { newSudoku } from './sudoku/rules';
+import { newGame } from './mahjong/rules';
+import { LAYOUTS } from './mahjong/layouts';
 
-afterEach(cleanup);
+// A real navigation is the one thing jsdom cannot do.
+vi.mock('./api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./api')>()),
+  goToLogin: vi.fn(),
+}));
+
+let server: ReturnType<typeof fakeServer>;
+
+beforeEach(() => {
+  server = fakeServer();
+  vi.mocked(goToLogin).mockClear();
+});
+
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+const settle = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+
+async function open() {
+  const view = render(<App />);
+  await settle();
+  return view;
+}
 
 test('home opens each game and comes back', async () => {
   const user = userEvent.setup();
-  render(<App />);
+  await open();
 
   for (const game of ['Mahjong', 'Sudoku']) {
     await user.click(screen.getByRole('button', { name: new RegExp(game) }));
@@ -23,12 +56,12 @@ test('home opens each game and comes back', async () => {
 
 test('mahjong goes from setup to a real deal and back, keeping the level', async () => {
   const user = userEvent.setup();
-  render(<App />);
+  await open();
   await user.click(screen.getByRole('button', { name: /Mahjong/ }));
 
   await user.click(screen.getByRole('button', { name: 'Medium' }));
   await user.click(screen.getByRole('button', { name: /^Trophy/ }));
-  const board = screen.getByRole('group', { name: 'Board' });
+  const board = await screen.findByRole('group', { name: 'Board' });
   expect(within(board).getAllByRole('button')).toHaveLength(62);
   expect(within(board).getAllByRole('button', { name: 'Face-down tile' }).length).toBeGreaterThan(0);
 
@@ -39,13 +72,17 @@ test('mahjong goes from setup to a real deal and back, keeping the level', async
   expect(screen.getByRole('heading', { name: 'isoca play' })).toBeTruthy();
 });
 
-test('home has no login or saved-game controls yet', () => {
-  render(<App />);
-  expect(screen.getAllByRole('button')).toHaveLength(2);
+test('home has the two games and a log out button', async () => {
+  await open();
+  expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
+    expect.stringContaining('Mahjong'),
+    expect.stringContaining('Sudoku'),
+    'Log out',
+  ]);
 });
 
-test('the home cards show tile art', () => {
-  render(<App />);
+test('the home cards show tile art', async () => {
+  await open();
   const mahjong = screen.getByRole('button', { name: /Mahjong/ });
   expect(mahjong.querySelectorAll('svg').length).toBeGreaterThan(0);
   const sudoku = screen.getByRole('button', { name: /Sudoku/ });
@@ -68,12 +105,13 @@ describe('back keeps the game', () => {
 
   test('mahjong resumes exactly, with its shape, moves, selection and level', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await open();
     await user.click(screen.getByRole('button', { name: /Mahjong/ }));
     expect(screen.queryByRole('button', { name: /^Resume/ })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Medium' }));
     await user.click(screen.getByRole('button', { name: /^Trophy/ }));
+    await screen.findByRole('group', { name: 'Board' });
     await user.dblClick(freeTiles()[0]);
     await user.click(freeTiles()[0]); // selected, left in the air
     expect(screen.getByText('Moves: 1')).toBeTruthy();
@@ -92,9 +130,10 @@ describe('back keeps the game', () => {
 
   test('mahjong: another shape asks before dropping a game with moves', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await open();
     await user.click(screen.getByRole('button', { name: /Mahjong/ }));
     await user.click(screen.getByRole('button', { name: /^Frame/ }));
+    await screen.findByRole('group', { name: 'Board' });
     await user.dblClick(freeTiles()[0]);
     await user.click(screen.getByRole('button', { name: 'Back to setup' }));
 
@@ -104,23 +143,24 @@ describe('back keeps the game', () => {
 
     await user.click(screen.getByRole('button', { name: /^Frame/ }));
     await user.click(screen.getByRole('button', { name: 'Start new game' }));
-    expect(screen.getByText('Moves: 0')).toBeTruthy();
+    expect(await screen.findByText('Moves: 0')).toBeTruthy();
 
     // No moves yet, so nothing to lose and no question.
     await user.click(screen.getByRole('button', { name: 'Back to setup' }));
     await user.click(screen.getByRole('button', { name: 'Hard' }));
     await user.click(screen.getByRole('button', { name: /^Fort/ }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(screen.getByText('Moves: 0')).toBeTruthy();
+    expect(await screen.findByText('Moves: 0')).toBeTruthy();
   });
 
   test('sudoku resumes exactly, with its numbers, notes, mode and level', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await open();
     await user.click(screen.getByRole('button', { name: /Sudoku/ }));
     expect(screen.queryByRole('button', { name: /^Resume/ })).toBeNull();
 
     await user.click(screen.getByRole('button', { name: 'Hard' }));
+    await screen.findByRole('group', { name: 'Board' });
     const empty = () => within(board()).getAllByRole('button', { name: /empty$/ });
     const pad = (d: string) => within(screen.getByRole('group', { name: 'Numbers' })).getByRole('button', { name: d });
     await user.click(empty()[0]);
@@ -139,9 +179,10 @@ describe('back keeps the game', () => {
 
   test('sudoku: a level asks before dropping a game with moves', async () => {
     const user = userEvent.setup();
-    render(<App />);
+    await open();
     await user.click(screen.getByRole('button', { name: /Sudoku/ }));
     await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await screen.findByRole('group', { name: 'Board' });
     const held = look();
     await user.click(within(board()).getAllByRole('button', { name: /empty$/ })[0]);
     await user.click(within(screen.getByRole('group', { name: 'Numbers' })).getByRole('button', { name: '5' }));
@@ -155,6 +196,221 @@ describe('back keeps the game', () => {
     await user.click(screen.getByRole('button', { name: 'Back to levels' }));
     await user.click(screen.getByRole('button', { name: 'Medium' }));
     await user.click(screen.getByRole('button', { name: 'Start new game' }));
-    expect(screen.getByText('Medium')).toBeTruthy();
+    expect(await screen.findByText('Medium')).toBeTruthy();
   });
 });
+
+describe('the server', () => {
+  const trophy = LAYOUTS.find((l) => l.id === 'trophy')!;
+  const dealt = newGame(trophy.cells.map((c, id) => ({ id, ...c, face: 'cat' })));
+  const played = { ...dealt, onBoard: dealt.onBoard.slice(1), history: [{ onBoard: dealt.onBoard, slots: [] }] };
+
+  test('opening the app resumes the saved games', async () => {
+    const user = userEvent.setup();
+    server.saves.mahjong = { layout: 'trophy', state: played };
+    server.saves.sudoku = newSudokuSave();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    await user.click(screen.getByRole('button', { name: 'Resume Trophy, 1 move' }));
+    expect(within(screen.getByRole('group', { name: 'Board' })).getAllByRole('button')).toHaveLength(61);
+    expect(screen.getByText('Moves: 1')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: 'Back to setup' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    await user.click(screen.getByRole('button', { name: 'Resume Easy, 0 moves' }));
+    expect(within(screen.getByRole('group', { name: 'Board' })).getAllByRole('button')).toHaveLength(81);
+    expect(server.requests.filter((r) => r.method === 'PUT')).toEqual([]);
+  });
+
+  test('a saved game asks before a new game replaces it', async () => {
+    const user = userEvent.setup();
+    server.saves.mahjong = { layout: 'trophy', state: played };
+    await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    await user.click(screen.getByRole('button', { name: /^Frame/ }));
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    expect(server.requests.some((r) => r.path === '/api/new/mahjong')).toBe(false);
+    await user.click(screen.getByRole('button', { name: 'Start new game' }));
+    expect(await screen.findByText('Moves: 0')).toBeTruthy();
+    expect(server.requests.find((r) => r.path === '/api/new/mahjong')!.body).toEqual({ layout: 'frame' });
+  });
+
+  test('a mahjong save holds the layout id and the state', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    await user.click(screen.getByRole('button', { name: /^Frame/ }));
+    await screen.findByRole('group', { name: 'Board' });
+    await settle();
+    const saved = server.saves.mahjong as { layout: string; state: { tiles: unknown[]; history: unknown[] } };
+    expect(saved.layout).toBe('frame');
+    expect(saved.state.tiles.length).toBeGreaterThan(0);
+    expect(saved.state.history).toEqual([]);
+  });
+
+  test('a sudoku save holds the state, and a new game names the board on screen', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await settle();
+    const saved = server.saves.sudoku as { puzzle: { givens: string; solution: string; level: string } };
+    expect(saved.puzzle.level).toBe('easy');
+    expect(saved.puzzle.solution).toHaveLength(81);
+
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    await settle();
+    const asked = server.requests.filter((r) => r.path === '/api/new/sudoku').at(-1)!;
+    expect(asked.body).toEqual({ level: 'easy', not: saved.puzzle.givens });
+  });
+
+  test('a device opening later shows the latest save', async () => {
+    const user = userEvent.setup();
+    const first = await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    await user.click(screen.getByRole('button', { name: 'Hard' }));
+    await screen.findByRole('group', { name: 'Board' });
+    const board = () => screen.getByRole('group', { name: 'Board' });
+    await user.click(within(board()).getAllByRole('button', { name: /empty$/ })[0]);
+    await user.click(within(screen.getByRole('group', { name: 'Numbers' })).getByRole('button', { name: '5' }));
+    await settle();
+    first.unmount();
+
+    await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    await user.click(screen.getByRole('button', { name: 'Resume Hard, 1 move' }));
+    expect(within(board()).getAllByRole('button', { name: /written 5$/ })).toHaveLength(1);
+  });
+
+  test('a 401 shows the marker and a link to log in, and keeps the game in memory', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    const board = await screen.findByRole('group', { name: 'Board' });
+    await settle();
+
+    server.answer = ({ method }) => (method === 'PUT' ? 401 : undefined);
+    const square = within(board).getAllByRole('button', { name: /empty$/ })[0];
+    await user.click(square);
+    await settle();
+    const link = screen.getByRole('link', { name: 'Log in' });
+    expect(link.getAttribute('href')).toBe('/login');
+    // A new tab, so this page and its unsaved game stay where they are.
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(square.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  test('the marker says nothing when saved, and nothing about whether a sudoku is right', async () => {
+    const user = userEvent.setup();
+    const { container } = await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await settle();
+    expect(container.querySelector('.save-marker')).toBeNull();
+
+    server.answer = ({ method }) => (method === 'PUT' ? 503 : undefined);
+    await user.click(within(screen.getByRole('group', { name: 'Board' })).getAllByRole('button', { name: /empty$/ })[0]);
+    await settle();
+    const said = container.querySelector('.save-marker')!.textContent!;
+    expect(said).toMatch(/not saved/i);
+    expect(said).not.toMatch(/wrong|right|correct|mistake|solved/i);
+  });
+
+  test('new game is disabled offline with a short note', async () => {
+    const user = userEvent.setup();
+    server.saves.mahjong = { layout: 'trophy', state: dealt };
+    await open();
+    goOffline();
+    await settle();
+
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    const frame = screen.getByRole('button', { name: /^Frame/ }) as HTMLButtonElement;
+    expect(frame.disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Random' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('New games need a connection.')).toBeTruthy();
+
+    await user.click(screen.getByRole('button', { name: /^Resume Trophy/ }));
+    expect((screen.getByRole('button', { name: 'New game' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('New games need a connection.')).toBeTruthy();
+    expect(server.requests.some((r) => r.path === '/api/new/mahjong')).toBe(false);
+  });
+
+  test('sudoku too: levels and new game are disabled offline, with the note', async () => {
+    const user = userEvent.setup();
+    server.saves.sudoku = newSudokuSave();
+    await open();
+    goOffline();
+    await settle();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    expect((screen.getByRole('button', { name: 'Hard' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('New games need a connection.')).toBeTruthy();
+    await user.click(screen.getByRole('button', { name: /^Resume Easy/ }));
+    expect((screen.getByRole('button', { name: 'New game' }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText('New games need a connection.')).toBeTruthy();
+  });
+
+  test('a new game that fails says so and leaves the held game alone', async () => {
+    const user = userEvent.setup();
+    server.saves.mahjong = { layout: 'trophy', state: played };
+    await open();
+    server.answer = ({ path }) => (path === '/api/new/mahjong' ? 503 : undefined);
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    await user.click(screen.getByRole('button', { name: /^Frame/ }));
+    await user.click(screen.getByRole('button', { name: 'Start new game' }));
+    expect(await screen.findByText('That did not work. Try again.')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Resume Trophy, 1 move' })).toBeTruthy();
+  });
+
+  test('starting waits for the load, so a new game cannot pass over a saved one', async () => {
+    const user = userEvent.setup();
+    server.answer = ({ method }) => (method === 'GET' ? 503 : undefined);
+    await open();
+    await user.click(screen.getByRole('button', { name: /Mahjong/ }));
+    expect((screen.getByRole('button', { name: /^Frame/ }) as HTMLButtonElement).disabled).toBe(true);
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    expect((screen.getByRole('button', { name: 'Easy' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  test('home has a log out button that posts /logout', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await settle();
+    expect(server.requests.at(-1)).toMatchObject({ method: 'POST', path: '/logout' });
+    expect(goToLogin).toHaveBeenCalledOnce();
+  });
+
+  test('log out sends the last move first', async () => {
+    const user = userEvent.setup();
+    await open();
+    await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+    await user.click(screen.getByRole('button', { name: 'Easy' }));
+    await screen.findByRole('group', { name: 'Board' });
+    await user.click(screen.getByRole('button', { name: 'Back to levels' }));
+    await user.click(screen.getByRole('button', { name: 'Back to home' }));
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    await settle();
+    const paths = server.requests.map((r) => `${r.method} ${r.path}`);
+    expect(paths).toContain('POST /logout');
+    expect(paths.lastIndexOf('PUT /api/save/sudoku')).toBeLessThan(paths.indexOf('POST /logout'));
+  });
+
+  test('log out offline says it cannot, and stays', async () => {
+    const user = userEvent.setup();
+    await open();
+    goOffline();
+    await settle();
+    await user.click(screen.getByRole('button', { name: 'Log out' }));
+    expect(screen.getByText('Logging out needs a connection.')).toBeTruthy();
+    expect(server.requests.some((r) => r.path === '/logout')).toBe(false);
+    expect(goToLogin).not.toHaveBeenCalled();
+  });
+});
+
+function newSudokuSave() {
+  return newSudoku(blanked('easy', [0, 1, 2]));
+}

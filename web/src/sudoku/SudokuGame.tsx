@@ -1,9 +1,9 @@
-import { useState, type Dispatch, type SetStateAction } from 'react';
+import { useState, type SetStateAction } from 'react';
+import { newGameProblem, newSudoku as askForPuzzle, OFFLINE_NOTE } from '../api';
 import ConfirmDialog from '../ConfirmDialog';
 import type { Level } from '../mahjong/layouts';
 import ResumeButton from '../ResumeButton';
-import { PUZZLES } from './puzzles';
-import { hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, type Puzzle, type SudokuState } from './rules';
+import { hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, type SudokuState } from './rules';
 import './sudoku.css';
 
 const LEVELS: { id: Level; name: string; line: string }[] = [
@@ -13,14 +13,6 @@ const LEVELS: { id: Level; name: string; line: string }[] = [
 ];
 
 const DIGITS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
-
-// A puzzle of the level, never the one in play unless it is the only one.
-function pick(level: Level, current?: Puzzle): Puzzle {
-  const all = PUZZLES.filter((p) => p.level === level);
-  const others = all.filter((p) => p !== current);
-  const pool = others.length > 0 ? others : all;
-  return pool[Math.floor(Math.random() * pool.length)];
-}
 
 // What the square says to a screen reader: what it holds, never whether that is right.
 function describe(state: SudokuState, cell: number): string {
@@ -78,18 +70,31 @@ function Cell({ state, cell, onSelect }: { state: SudokuState; cell: number; onS
 function Game({
   state,
   onChange,
+  online,
   onLevels,
 }: {
   state: SudokuState;
   onChange: (update: (s: SudokuState) => SudokuState) => void;
+  online: boolean;
   onLevels: () => void;
 }) {
   const level = state.puzzle.level;
   const [asking, setAsking] = useState(false);
-  const deal = () => {
-    const next = newSudoku(pick(level, state.puzzle));
-    onChange(() => next);
+  const [starting, setStarting] = useState(false);
+  const [problem, setProblem] = useState('');
+  const deal = async () => {
+    setStarting(true);
+    setProblem('');
+    try {
+      const next = newSudoku(await askForPuzzle(level, state.puzzle.givens));
+      onChange(() => next);
+    } catch (error) {
+      setProblem(newGameProblem(error));
+    } finally {
+      setStarting(false);
+    }
   };
+  const startNote = online ? problem : OFFLINE_NOTE;
   const name = LEVELS.find((l) => l.id === level)!.name;
 
   return (
@@ -101,9 +106,10 @@ function Game({
           <button
             type="button"
             className="back"
+            disabled={!online || starting}
             onClick={() => {
               if (hasMovesToLose(state)) setAsking(true);
-              else deal();
+              else void deal();
             }}
           >
             New game
@@ -156,6 +162,7 @@ function Game({
             </button>
           ))}
         </div>
+        {startNote && <p className="start-note" aria-live="polite">{startNote}</p>}
       </main>
 
       {asking && (
@@ -166,7 +173,7 @@ function Game({
           confirmLabel="Start new game"
           onKeep={() => setAsking(false)}
           onConfirm={() => {
-            deal();
+            void deal();
             setAsking(false);
           }}
         />
@@ -178,23 +185,45 @@ function Game({
 export default function SudokuGame({
   game,
   onGame,
+  ready = true,
+  online = true,
   onBack,
 }: {
   game: SudokuState | null;
-  onGame: Dispatch<SetStateAction<SudokuState | null>>;
+  onGame: (action: SetStateAction<SudokuState | null>) => void;
+  ready?: boolean;
+  online?: boolean;
   onBack: () => void;
 }) {
   const [playing, setPlaying] = useState(false);
   const [replacing, setReplacing] = useState<Level | null>(null);
+  const [starting, setStarting] = useState(false);
+  const [problem, setProblem] = useState('');
 
   if (playing && game) {
-    return <Game state={game} onChange={(update) => onGame((g) => g && update(g))} onLevels={() => setPlaying(false)} />;
+    return (
+      <Game
+        state={game}
+        onChange={(update) => onGame((g) => g && update(g))}
+        online={online}
+        onLevels={() => setPlaying(false)}
+      />
+    );
   }
 
-  const start = (level: Level) => {
-    onGame(newSudoku(pick(level)));
-    setPlaying(true);
+  const start = async (level: Level) => {
+    setStarting(true);
+    setProblem('');
+    try {
+      onGame(newSudoku(await askForPuzzle(level, game?.puzzle.givens)));
+      setPlaying(true);
+    } catch (error) {
+      setProblem(newGameProblem(error));
+    } finally {
+      setStarting(false);
+    }
   };
+  const note = online ? problem : OFFLINE_NOTE;
   return (
     <>
       <main className="shell sd-setup" inert={replacing !== null}>
@@ -214,7 +243,8 @@ export default function SudokuGame({
               type="button"
               className="sd-levelbtn"
               aria-label={l.name}
-              onClick={() => (game && hasMovesToLose(game) ? setReplacing(l.id) : start(l.id))}
+              disabled={!online || !ready || starting}
+              onClick={() => (game && hasMovesToLose(game) ? setReplacing(l.id) : void start(l.id))}
             >
               <span className="sd-levelname">{l.name}</span>
               <span className="sd-levelline">{l.line}</span>
@@ -222,6 +252,7 @@ export default function SudokuGame({
           ))}
         </div>
         <p className="sd-hint">Tap a level to start.</p>
+        {note && <p className="start-note" aria-live="polite">{note}</p>}
       </main>
 
       {replacing && (
@@ -232,7 +263,7 @@ export default function SudokuGame({
           confirmLabel="Start new game"
           onKeep={() => setReplacing(null)}
           onConfirm={() => {
-            start(replacing);
+            void start(replacing);
             setReplacing(null);
           }}
         />

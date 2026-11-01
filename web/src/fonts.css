@@ -1,5 +1,4 @@
-/* Only the latin woff2 of each font, so the one-file page stays small. The build
-   turns each into a data URI; a sandboxed frame can load fonts no other way. */
+/* Only the latin woff2 of each font. The build ships each as its own hashed file. */
 @font-face {
   font-family: 'Press Start 2P';
   font-display: swap;

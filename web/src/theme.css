@@ -28,6 +28,8 @@
 html, body { background: var(--page); color: var(--fg); }
 body { font-family: var(--body); font-size: 15px; line-height: 1.5; min-height: 100dvh; }
 
+button:disabled { cursor: default; opacity: 0.45; }
+
 button {
   font: inherit;
   color: inherit;
@@ -58,8 +60,8 @@ button {
 .back.resume { display: block; width: calc(100% - 3px); margin-bottom: 16px; text-align: left; line-height: 1.5; }
 
 /* A tile: the 18 x 23 sprite at a whole-number scale, so 36 x 46 here, 54 x 69 where
-   a rule or the board says so. Its outline and edge are part of the drawing. A board
-   tile is narrower than --tap, so it opts out of the button floor. */
+   a rule or the board says so. Its outline and edge are part of the drawing. The board
+   sets a tile's size itself, sometimes under --tap, so it opts out of the button floor. */
 .pixels { display: block; width: 100%; height: 100%; }
 .tile {
   display: block;
@@ -153,3 +155,21 @@ button {
 .dialog-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 4px; padding-right: 3px; }
 .dialog-actions .back { flex: 1 1 auto; }
 .dialog-confirm { border-color: var(--accent); background: var(--rose); box-shadow: 3px 3px 0 var(--accent); }
+
+/* A short line under the buttons: why a new game can't start right now */
+.start-note { margin-top: 12px; font-family: var(--big); font-size: 22px; line-height: 1.1; color: var(--dim); }
+
+.home-foot { margin-top: 28px; }
+
+/* Saving: nothing to see while it goes well, and small when it doesn't */
+.save-status { position: fixed; left: 8px; bottom: 8px; z-index: 5; pointer-events: none; }
+.save-marker {
+  padding: 2px 8px;
+  font-family: var(--big);
+  font-size: 18px;
+  line-height: 1.2;
+  color: var(--dim);
+  background: var(--bar);
+  border: 1px solid var(--line2);
+}
+.save-marker a { color: var(--accent); pointer-events: auto; }

@@ -1,4 +1,4 @@
-// Back to the game left in memory, named so it is clear which one that is.
+// Back to the held game, named so it is clear which one that is.
 export default function ResumeButton({
   name,
   moves,

@@ -5,12 +5,14 @@ import { join } from 'node:path';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
 import { build } from 'vite';
 
-// A real production build, because the page goes out as one file in a sandboxed
-// frame: null origin, no CORS headers, nothing else to load.
-describe('the built page', () => {
+// A real production build. The strict CSP allows only files of our own, so nothing is
+// inline, and no request may go to a third party.
+describe('the built site', () => {
   const outDir = mkdtempSync(join(tmpdir(), 'isoca-play-build-'));
-  let files: string[] = [];
+  let assets: string[] = [];
   let html = '';
+  const assetText = (ext: string) =>
+    assets.filter((f) => f.endsWith(ext)).map((f) => readFileSync(join(outDir, 'assets', f), 'utf8'));
 
   beforeAll(async () => {
     // Vitest runs in test mode; without this the build would carry dev React.
@@ -18,37 +20,51 @@ describe('the built page', () => {
     process.env.NODE_ENV = 'production';
     await build({ logLevel: 'silent', mode: 'production', build: { outDir, emptyOutDir: true } });
     process.env.NODE_ENV = env;
-    files = readdirSync(outDir);
+    assets = readdirSync(join(outDir, 'assets'));
     html = readFileSync(join(outDir, 'index.html'), 'utf8');
   }, 120_000);
 
   afterAll(() => rmSync(outDir, { recursive: true, force: true }));
 
-  test('is one file, with its script and styles inline', () => {
-    expect(files).toEqual(['index.html']);
-    // React's own code mentions these words, so look at the tags alone.
-    const tags = html.replace(/(<(script|style)\b[^>]*>)[\s\S]*?<\/\2>/g, '$1');
-    expect(tags).not.toMatch(/crossorigin/);
-    // The one link is an empty icon, which stops the browser asking for /favicon.ico.
-    expect(tags.match(/<link\b[^>]*>/g)).toEqual(['<link rel="icon" href="data:," />']);
-    expect(tags).not.toMatch(/<script[^>]*\bsrc=/);
-    expect(html).toMatch(/<style[\s>]/);
-    expect(html).toMatch(/<script[^>]*>[\s\S]{1000}/);
+  test('has hashed script and style files, and the page loads them from the root', () => {
+    expect(assets.filter((f) => f.endsWith('.js')).length).toBeGreaterThan(0);
+    expect(assets.filter((f) => f.endsWith('.css')).length).toBeGreaterThan(0);
+    for (const file of assets) expect(file).toMatch(/-[\w-]{8}\.\w+$/);
+    expect(html).toMatch(/<script[^>]*\bsrc="\/assets\/[^"]+\.js"/);
+    expect(html).toMatch(/<link[^>]*\bhref="\/assets\/[^"]+\.css"/);
   });
 
-  test('carries the three latin woff2 fonts as data URIs and nothing else', () => {
-    const faces = html.match(/@font-face\s*\{[^}]*\}/g) ?? [];
-    const families = faces.map((f) => /font-family:\s*['"]?([^'";]+)/.exec(f)![1]).sort();
-    expect(families).toEqual(['IBM Plex Mono', 'Press Start 2P', 'VT323']);
-    for (const face of faces) {
-      const urls = face.match(/url\([^)]*\)/g) ?? [];
-      expect(urls).toHaveLength(1);
-      expect(urls[0]).toMatch(/^url\(["']?data:font\/woff2;base64,/);
-    }
-    expect(html).not.toMatch(/\.woff2?\b/);
+  test('has no inline script, style or handler', () => {
+    expect(html.match(/<script\b[^>]*>/g)!.every((tag) => /\bsrc=/.test(tag))).toBe(true);
+    expect(html).not.toMatch(/<script\b[^>]*>[^<]+<\/script>/);
+    expect(html).not.toMatch(/<style[\s>]/);
+    expect(html).not.toMatch(/\sstyle=/);
+    expect(html).not.toMatch(/\son\w+=/);
   });
 
-  test('stays small', () => {
-    expect(html.length).toBeLessThan(400_000);
+  test('asks no third party for anything', () => {
+    expect(html).not.toMatch(/https?:\/\//);
+    for (const css of assetText('.css')) expect(css).not.toMatch(/url\(\s*["']?(https?:)?\/\//);
+    // React's messages hold links, which are only text; nothing is fetched from a full URL.
+    for (const js of assetText('.js')) expect(js).not.toMatch(/fetch\(\s*["'`]https?:/);
+  });
+
+  test('ships the three latin woff2 fonts and no other font, none of them inlined', () => {
+    const fonts = assets.filter((f) => /\.(woff2?|ttf|otf|eot)$/.test(f));
+    expect(fonts.map((f) => f.replace(/-[\w-]{8}\.woff2$/, '')).sort()).toEqual([
+      'ibm-plex-mono-latin-400-normal',
+      'press-start-2p-latin-400-normal',
+      'vt323-latin-400-normal',
+    ]);
+    const css = assetText('.css').join('');
+    expect(css).not.toMatch(/data:font/);
+    expect(css.match(/@font-face/g)).toHaveLength(3);
+  });
+
+  test('carries no sudoku puzzle or local deal', () => {
+    const js = assetText('.js').join('');
+    // A solution from the old starter set, and the deal's seeded random number.
+    expect(js).not.toContain('687251934254893167931467852793146528415328679862579341128735496349682715576914283');
+    expect(js).not.toMatch(/1831565813|0x6d2b79f5/i);
   });
 });

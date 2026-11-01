@@ -1,9 +1,9 @@
 import { describe, expect, test } from 'vitest';
 import { newSudoku, pressDigit, selectCell, setMode, undo } from './rules';
 import type { SudokuState } from './rules';
-import { PUZZLES } from './puzzles';
+import { blanked } from '../fakeServer.testutil';
 
-const P = PUZZLES[0];
+const P = blanked('easy', [0, 1, 2, 12, 40, 41, 70, 80]);
 const emptyCells = [...P.givens].flatMap((ch, i) => (ch === '.' ? [i] : []));
 const givenCell = [...P.givens].findIndex((ch) => ch !== '.');
 const sol = (i: number) => Number(P.solution[i]);
@@ -116,7 +116,7 @@ describe('sudoku rules', () => {
   });
 
   test('the state has no field naming mistakes or conflicts', () => {
-    expect(Object.keys(newSudoku(PUZZLES[0])).sort()).toEqual([
+    expect(Object.keys(newSudoku(P)).sort()).toEqual([
       'history',
       'mode',
       'notes',

@@ -124,7 +124,7 @@ describe('TileArt', () => {
 
   test('a face names itself for screen readers', () => {
     const { container } = render(<TileArt face="cat" />);
-    expect(container.querySelector('svg')!.getAttribute('aria-label')).toBe('cat');
+    expect(container.querySelector('svg')!.getAttribute('aria-label')).toBe('Cat');
   });
 
   test('an unknown face draws a blank tile rather than crashing', () => {

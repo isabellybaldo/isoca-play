@@ -30,7 +30,15 @@ function SudokuArt() {
   );
 }
 
-export default function Home({ onOpen }: { onOpen: (screen: Screen) => void }) {
+export default function Home({
+  onOpen,
+  onLogOut,
+  note,
+}: {
+  onOpen: (screen: Screen) => void;
+  onLogOut: () => void;
+  note: string;
+}) {
   return (
     <main className="shell">
       <h1 className="home-title">isoca play</h1>
@@ -45,6 +53,10 @@ export default function Home({ onOpen }: { onOpen: (screen: Screen) => void }) {
           <span className="game-name">Sudoku</span>
           <span className="game-line">Fill the grid, one to nine.</span>
         </button>
+      </div>
+      <div className="home-foot">
+        <button type="button" className="back" onClick={onLogOut}>Log out</button>
+        {note && <p className="start-note" aria-live="polite">{note}</p>}
       </div>
     </main>
   );

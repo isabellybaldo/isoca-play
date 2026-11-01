@@ -37,6 +37,8 @@ export default function MahjongSetup({
   onStart,
   onBack,
   inert,
+  disabled = false,
+  note = '',
   resume,
 }: {
   level: Level;
@@ -44,6 +46,8 @@ export default function MahjongSetup({
   onStart: (layout: Layout) => void;
   onBack: () => void;
   inert?: boolean;
+  disabled?: boolean;
+  note?: string;
   resume?: ReactNode;
 }) {
   const types = layoutsFor(level);
@@ -74,6 +78,7 @@ export default function MahjongSetup({
         <button
           type="button"
           className="back"
+          disabled={disabled}
           onClick={() => onStart(types[Math.floor(Math.random() * types.length)])}
         >
           Random
@@ -83,7 +88,7 @@ export default function MahjongSetup({
 
       <div className="mj-types">
         {types.map((layout) => (
-          <button key={layout.id} type="button" className="mj-type" onClick={() => onStart(layout)}>
+          <button key={layout.id} type="button" className="mj-type" disabled={disabled} onClick={() => onStart(layout)}>
             <ShapeDrawing layout={layout} />
             <span className="mj-type-name">{layout.name}</span>
             <span className="mj-type-count">{layout.cells.length} tiles</span>
@@ -92,6 +97,7 @@ export default function MahjongSetup({
       </div>
 
       <p className="mj-line">Tap a type to start.</p>
+      {note && <p className="start-note" aria-live="polite">{note}</p>}
     </main>
   );
 }

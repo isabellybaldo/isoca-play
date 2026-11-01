@@ -1,24 +1,25 @@
 import { useState } from 'react';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, describe, expect, test, vi } from 'vitest';
-import { PUZZLES } from './puzzles';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import { newSudoku } from '../api';
+import { blanked, SOLUTION as SOLVED } from '../fakeServer.testutil';
 import type { Puzzle, SudokuState } from './rules';
 import SudokuGame from './SudokuGame';
 
-// Three small puzzles: the real first easy solution with three squares blanked.
-vi.mock('./puzzles', async (importOriginal) => {
-  const real = await importOriginal<typeof import('./puzzles')>();
-  const solution = real.PUZZLES.find((p) => p.level === 'easy')!.solution;
-  const blank = (level: Puzzle['level'], cells: number[]): Puzzle => ({
-    level,
-    solution,
-    givens: [...solution].map((ch, i) => (cells.includes(i) ? '.' : ch)).join(''),
-  });
-  return { ...real, PUZZLES: [blank('easy', [0, 1, 2]), blank('easy', [40, 41, 42]), blank('hard', [78, 79, 80])] };
+vi.mock('../api', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../api')>()),
+  newSudoku: vi.fn(),
+}));
+
+const PACK: Puzzle[] = [blanked('easy', [0, 1, 2]), blanked('easy', [40, 41, 42]), blanked('hard', [78, 79, 80]), blanked('hard', [60, 61, 62])];
+
+// What the server does: a puzzle of the level, never the one on screen.
+beforeEach(() => {
+  vi.mocked(newSudoku).mockImplementation(async (level, not) => PACK.find((p) => p.level === level && p.givens !== not)!);
 });
 
-const SOLUTION = [...PUZZLES[0].solution].map(Number);
+const SOLUTION = [...SOLVED].map(Number);
 const FIRST_BLANKS = [0, 1, 2];
 const SECOND_BLANKS = [40, 41, 42];
 const wrongDigit = (cell: number) => (SOLUTION[cell] % 9) + 1;
@@ -36,11 +37,11 @@ function Holder({ onBack }: { onBack: () => void }) {
 }
 
 async function start(level = 'Easy') {
-  vi.spyOn(Math, 'random').mockReturnValue(0);
   const onBack = vi.fn();
   render(<Holder onBack={onBack} />);
   const user = userEvent.setup();
   await user.click(screen.getByRole('button', { name: level }));
+  await screen.findByRole('group', { name: 'Board' });
   return { user, onBack };
 }
 
@@ -252,6 +253,7 @@ describe('new game', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Start new game' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
     // the other easy puzzle: its first squares are given, squares 40 to 42 are empty
+    await waitFor(() => expect(cells()[0].getAttribute('aria-label')).toMatch(/given/));
     expect(cells()[0].getAttribute('aria-label')).toMatch(/given/);
     for (const c of SECOND_BLANKS) expect(cells()[c].getAttribute('aria-label')).toMatch(/empty/);
     expect(confirm).not.toHaveBeenCalled();
@@ -278,7 +280,7 @@ describe('new game', () => {
     await fill(user, FIRST_BLANKS, (c) => SOLUTION[c]);
     await user.click(screen.getByRole('button', { name: 'New game' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(cells()[40].getAttribute('aria-label')).toMatch(/empty/);
+    await waitFor(() => expect(cells()[40].getAttribute('aria-label')).toMatch(/empty/));
     expect(note()).toBe('');
   });
 
@@ -287,7 +289,7 @@ describe('new game', () => {
     await user.click(cells()[0]); // only a selection, not a move
     await user.click(screen.getByRole('button', { name: 'New game' }));
     expect(screen.queryByRole('alertdialog')).toBeNull();
-    expect(cells()[0].getAttribute('aria-label')).toMatch(/given/); // the other puzzle
+    await waitFor(() => expect(cells()[0].getAttribute('aria-label')).toMatch(/given/)); // the other puzzle
 
     await writeIn(user, 40, 1);
     await user.click(screen.getByRole('button', { name: 'Return' }));
@@ -295,11 +297,20 @@ describe('new game', () => {
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 
-  test('a level with one puzzle deals that one again', async () => {
+  test('asks the server for the level, naming the board on screen', async () => {
     const { user } = await start('Hard');
-    await writeIn(user, 80, 1);
+    await user.click(screen.getByRole('button', { name: 'New game' }));
+    await waitFor(() => expect(cells()[60].getAttribute('aria-label')).toMatch(/empty/));
+    expect(newSudoku).toHaveBeenLastCalledWith('hard', PACK[2].givens);
+  });
+
+  test('a new game that fails says so and leaves the board alone', async () => {
+    const { user } = await start();
+    await writeIn(user, 0, 4);
+    vi.mocked(newSudoku).mockRejectedValue(new TypeError('Failed to fetch'));
     await user.click(screen.getByRole('button', { name: 'New game' }));
     await user.click(screen.getByRole('button', { name: 'Start new game' }));
-    expect(cells()[80].getAttribute('aria-label')).toMatch(/empty/);
+    expect(await screen.findByText('That did not work. Try again.')).toBeTruthy();
+    expect(valueOf(0)).toBe('4');
   });
 });

@@ -860,9 +860,21 @@ function Pixels({ paint, width, height, label }: { paint: Paint[]; width: number
   );
 }
 
+// What a screen reader calls a face. The 1 of bamboo is drawn as the panda and the 1 of
+// stars as the moon, so those are their names.
+const OWN_NAMES: Record<string, string> = { bamboo1: 'Panda', star1: 'Moon' };
+
+export function faceName(face: string): string {
+  if (OWN_NAMES[face]) return OWN_NAMES[face];
+  const numbered = /^([a-z]+)(\d)$/.exec(face);
+  const word = numbered ? numbered[1] : face;
+  const name = word.charAt(0).toUpperCase() + word.slice(1);
+  return numbered ? `${name} ${numbered[2]}` : name;
+}
+
 export function TileArt({ face }: { face: string }) {
   const art = runs(TILE_ART[face] ?? [], 1, 2, (ch) => PIXEL_COLOURS[ch]);
-  return <Pixels paint={[...body(IVORY), ...art]} width={SPRITE_WIDTH} height={SPRITE_HEIGHT} label={face} />;
+  return <Pixels paint={[...body(IVORY), ...art]} width={SPRITE_WIDTH} height={SPRITE_HEIGHT} label={faceName(face)} />;
 }
 
 export function TileBack() {
@@ -872,5 +884,5 @@ export function TileBack() {
 
 // The drawing alone, with no tile around it, for a spot too small to hold a whole tile.
 export function FaceArt({ face }: { face: string }) {
-  return <Pixels paint={runs(TILE_ART[face] ?? [], 0, 0, (ch) => PIXEL_COLOURS[ch])} width={16} height={16} label={face} />;
+  return <Pixels paint={runs(TILE_ART[face] ?? [], 0, 0, (ch) => PIXEL_COLOURS[ch])} width={16} height={16} label={faceName(face)} />;
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState, type MouseEvent } from 'react';
+import { newGameProblem, newMahjong, OFFLINE_NOTE } from '../api';
 import ConfirmDialog from '../ConfirmDialog';
 import { boardBox, tileHeight, tilePosition, tileWidth } from './boardSize';
-import { makeDeal } from './deal';
 import type { Layout } from './layouts';
 import {
   hasMovesToLose,
@@ -15,7 +15,7 @@ import {
   type MahjongState,
   type Tile,
 } from './rules';
-import { TileArt, TileBack } from './TileArt';
+import { faceName, TileArt, TileBack } from './TileArt';
 import './mahjong.css';
 
 function measureViewport(): { width: number; height: number } {
@@ -25,19 +25,11 @@ function measureViewport(): { width: number; height: number } {
   };
 }
 
-export function dealGame(layout: Layout): MahjongState {
-  return newGame(makeDeal(layout, Math.floor(Math.random() * 2 ** 32)));
-}
-
 // A button does its own job and is not a tap away from the selected tile.
 const own = (action: () => void) => (event: MouseEvent) => {
   event.stopPropagation();
   action();
 };
-
-function capitalised(word: string): string {
-  return word.charAt(0).toUpperCase() + word.slice(1);
-}
 
 function BoardTile({
   state,
@@ -73,7 +65,7 @@ function BoardTile({
     );
   }
 
-  const name = `${capitalised(tile.face)} tile`;
+  const name = `${faceName(tile.face)} tile`;
   const free = isFree(state, tile.id);
   if (!free) {
     return (
@@ -126,15 +118,19 @@ export default function MahjongGame({
   layout,
   state,
   onChange,
+  online = true,
   onBack,
 }: {
   layout: Layout;
   state: MahjongState;
   onChange: (update: (s: MahjongState) => MahjongState) => void;
+  online?: boolean;
   onBack: () => void;
 }) {
   const [viewport, setViewport] = useState(measureViewport);
   const [asking, setAsking] = useState(false);
+  const [starting, setStarting] = useState(false);
+  const [problem, setProblem] = useState('');
 
   useEffect(() => {
     const measure = () => setViewport(measureViewport());
@@ -142,10 +138,20 @@ export default function MahjongGame({
     return () => window.removeEventListener('resize', measure);
   }, []);
 
-  const newDeal = () => {
-    const next = dealGame(layout);
-    onChange(() => next);
+  const newDeal = async () => {
+    setStarting(true);
+    setProblem('');
+    try {
+      const deal = await newMahjong(layout.id);
+      const next = newGame(deal.tiles);
+      onChange(() => next);
+    } catch (error) {
+      setProblem(newGameProblem(error));
+    } finally {
+      setStarting(false);
+    }
   };
+  const note = online ? problem : OFFLINE_NOTE;
   const width = tileWidth(layout, viewport.width, viewport.height);
   const box = boardBox(layout, width);
   // Lower layers first, and each row left to right, so upper tiles lie on top.
@@ -209,14 +215,16 @@ export default function MahjongGame({
             <button
               type="button"
               className="back"
+              disabled={!online || starting}
               onClick={own(() => {
                 if (hasMovesToLose(state)) setAsking(true);
-                else newDeal();
+                else void newDeal();
               })}
             >
               New game
             </button>
           </div>
+          {note && <p className="start-note" aria-live="polite">{note}</p>}
         </main>
       </div>
 
@@ -228,7 +236,7 @@ export default function MahjongGame({
           confirmLabel="Start new game"
           onKeep={() => setAsking(false)}
           onConfirm={() => {
-            newDeal();
+            void newDeal();
             setAsking(false);
           }}
         />
