@@ -60,3 +60,20 @@ test('a game that will not draw shows a note, keeps New game, and leaves the oth
   await user.click(screen.getByRole('button', { name: /Sudoku/ }));
   expect(screen.getByRole('button', { name: 'Resume Easy, 0 moves' })).toBeTruthy();
 });
+
+test('an unplayable sudoku save with no game: Keep playing closes the question, opens no board, and the note stays', async () => {
+  const server = fakeServer({ sudoku: { puzzle: { givens: 'x', solution: 'y' }, values: [], notes: [], history: [] } });
+  const user = userEvent.setup();
+  render(<App />);
+  await settle();
+
+  await user.click(screen.getByRole('button', { name: /Sudoku/ }));
+  expect(screen.getByText('The saved game could not be opened.')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Easy' }));
+  expect(screen.getByRole('alertdialog')).toBeTruthy();
+  await user.click(screen.getByRole('button', { name: 'Keep playing' }));
+  expect(screen.queryByRole('alertdialog')).toBeNull();
+  expect(screen.queryByRole('group', { name: 'Board' })).toBeNull();
+  expect(screen.getByText('The saved game could not be opened.')).toBeTruthy();
+  expect(server.puts('sudoku')).toEqual([]);
+});

@@ -135,8 +135,8 @@
    placed number is only outlined, so it never looks written. */
 .sd-acts { display: flex; gap: 8px; }
 .cell.is-tip { background: var(--card); color: var(--fg); outline: 3px dashed var(--accent); outline-offset: -3px; }
-.cell.is-tip.is-selected { background: #ffd166; color: var(--page); }
 .cell.is-wrong { background: var(--rose); color: var(--fg); outline: 3px dashed var(--accent); outline-offset: -3px; }
+.cell.is-tip.is-selected, .cell.is-wrong.is-selected { background: #ffd166; color: var(--page); }
 .notes > .tip-cut {
   color: var(--accent);
   font-weight: 700;

@@ -656,6 +656,17 @@ describe('tips', () => {
     expect(lit()).toHaveLength(0);
   });
 
+  test('a save arriving with equal contents in new arrays closes the tip', async () => {
+    const first = newGame(apart(['bunny', 'frog', 'bunny', 'cat']));
+    const view = render(<MahjongGame layout={layout} state={first} onChange={vi.fn()} onBack={vi.fn()} />);
+    await userEvent.setup().click(tipButton());
+    expect(lit()).toHaveLength(2);
+    const again = { ...first, onBoard: [...first.onBoard], slots: [...first.slots] };
+    view.rerender(<MahjongGame layout={layout} state={again} onChange={vi.fn()} onBack={vi.fn()} />);
+    expect(lit()).toHaveLength(0);
+    expect(tipLine().textContent).toBe('');
+  });
+
   test('with three slots full it marks no tile and points to Return', async () => {
     const { user } = play(apart(['a', 'b', 'c', 'x', 'x']));
     for (const name of ['A', 'B', 'C']) {

@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { newSudoku } from '../api';
 import { blanked, SOLUTION as SOLVED } from '../fakeServer.testutil';
-import type { Puzzle, SudokuState } from './rules';
+import { newSudoku as dealt, type Puzzle, type SudokuState } from './rules';
 import SudokuGame from './SudokuGame';
 import { tipChain } from './tips';
 
@@ -464,6 +464,21 @@ describe('tips', () => {
     await user.click(tipButton());
     expect(onGame.mock.calls.length).toBe(calls);
     expect(JSON.stringify(game)).toBe(before);
+  });
+
+  test('a save arriving with equal contents in new arrays closes the tip', async () => {
+    const onGame = vi.fn();
+    const first = dealt(blanked('easy', [0, 1, 2]));
+    const view = render(<SudokuGame game={first} onGame={onGame} onBack={vi.fn()} />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole('button', { name: /^Resume/ }));
+    await user.click(tipButton());
+    expect(note()).not.toBe('');
+    view.rerender(<SudokuGame game={structuredClone(first)} onGame={onGame} onBack={vi.fn()} />);
+    expect(lit()).toEqual([]);
+    expect(wrong()).toEqual([]);
+    expect(note()).toBe('');
+    expect(close()).toBeNull();
   });
 
   test('picking another square or the other mode keeps the tip', async () => {
