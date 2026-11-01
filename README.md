@@ -26,7 +26,7 @@ Pick a difficulty, then one of four maps per level or random. Every deal can be 
 - Slots are on by default. A Slots switch on the setup screen turns them off for the next
   game: tap a free tile, then its match, and both leave. The game is lost when no open
   pair is left. A game keeps the mode it started with.
-- A Tip button points at a good next move. It only highlights; nothing is moved or counted.
+- A Tip button suggests a next move. It only highlights; nothing is moved or counted.
 
 ### Sudoku
 
@@ -75,7 +75,9 @@ The image is built from the repository root: `docker build --build-arg VERSION=d
 
 ## AI disclosure
 
-**AI disclosure.** This project was built with Claude Code, Anthropic's AI coding agent, which wrote most of the code, tests, docs and art. I chose what to build, made the design calls and approved the results, and I'm responsible for what's here.
+This project was built with Claude Code, Anthropic's AI coding agent, which wrote most of the
+code, tests, docs and art. I chose what to build, made the design calls and approved the
+results, and I'm responsible for what's here.
 
 ## Licences
 
