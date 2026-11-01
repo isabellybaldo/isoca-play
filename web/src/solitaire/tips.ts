@@ -72,7 +72,7 @@ export function tipFor(s: SolitaireState): Tip {
 
   // 3. A king from the pile into an empty column, when it uncovers a pile card.
   // (A king with face-down cards under it was found by rule 1; one without is not moved.)
-  const king = topOf(s, 'w');
+  const king = topOf(s, 'w'); // the card showing from the pile, whatever its rank
   if (king !== undefined && rankOf(king) === 13 && s.waste.length > 1) {
     for (const j of COLUMNS) {
       if (canMove(s, 'w', columnPile(j), 1)) {
@@ -82,7 +82,7 @@ export function tipFor(s: SolitaireState): Tip {
   }
 
   // 4. Any other move from the face-up pile.
-  if (king !== undefined && rankOf(king) !== 13) {
+  if (king !== undefined) {
     for (const j of COLUMNS) {
       if (canMove(s, 'w', columnPile(j), 1)) {
         return move('w', columnPile(j), 1, 'The card showing from the pile fits here.');

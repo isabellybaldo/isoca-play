@@ -75,11 +75,11 @@ describe('tipFor', () => {
     expect(tipFor(safe)).toMatchObject({ kind: 'move', from: 'c0', to: 'f0' });
   });
 
-  test('a king into an empty column only if it uncovers something', () => {
+  test('a king from the pile into an empty column, first when it uncovers a card', () => {
     const t = table({ cols: { 6: { down: [], up: [] } }, waste: [d(3), s(13)], stock: [5] });
     expect(tipFor(t)).toMatchObject({ kind: 'move', from: 'w', to: 'c6', n: 1 });
     const alone = table({ cols: { 6: { down: [], up: [] } }, waste: [s(13)], stock: [5] });
-    expect(tipFor(alone).kind).toBe('turn');
+    expect(tipFor(alone)).toMatchObject({ kind: 'move', from: 'w', to: 'c6', n: 1 });
     const bare = table({ cols: { 0: { down: [], up: [s(13), h(12)] }, 6: { down: [], up: [] } }, stock: [5] });
     expect(tipFor(bare).kind).toBe('turn');
   });
@@ -92,6 +92,16 @@ describe('tipFor', () => {
   test('any other move from the face-up pile', () => {
     const t = table({ waste: [h(8)], stock: [5] });
     expect(tipFor(t)).toMatchObject({ kind: 'move', from: 'w', to: 'c2', n: 1 });
+  });
+
+  test('rule 4 can send the pile card to an answer pile', () => {
+    const t = table({ foundations: [3, 0, 0, 0], waste: [h(4)], stock: [5] });
+    expect(tipFor(t)).toMatchObject({ kind: 'move', from: 'w', to: 'f0', n: 1 });
+  });
+
+  test('a pile king that can go home is tipped', () => {
+    const t = table({ foundations: [12, 0, 0, 0], waste: [h(13)], stock: [5] });
+    expect(tipFor(t)).toMatchObject({ kind: 'move', from: 'w', to: 'f0', n: 1 });
   });
 
   test('otherwise turn the pile', () => {
