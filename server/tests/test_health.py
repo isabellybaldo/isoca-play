@@ -5,12 +5,20 @@ from fastapi import Depends
 from fastapi.testclient import TestClient
 
 from conftest import BASE_URL
-from isoca_play.app import create_app, get_db
+from isoca_play.app import app_from_env, create_app, get_db
 
 
 def test_healthz_is_public_and_names_the_version(client):
     r = client.get("/healthz")
     assert r.status_code == 200 and r.json() == {"version": "test"}
+
+
+def test_the_image_entry_point_reads_the_environment(tmp_path, monkeypatch):
+    monkeypatch.setenv("DB_PATH", str(tmp_path / "play.db"))
+    monkeypatch.setenv("STATIC_DIR", str(tmp_path / "static"))
+    monkeypatch.setenv("APP_VERSION", "abc123")
+    r = TestClient(app_from_env(), base_url=BASE_URL).get("/healthz")
+    assert r.json() == {"version": "abc123"}
 
 
 def test_settings_now_is_injectable(settings, clock):

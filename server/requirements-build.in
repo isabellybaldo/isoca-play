@@ -1,0 +1,2 @@
+# Only to build the wheel inside the Dockerfile; never in the running image.
+setuptools

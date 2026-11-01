@@ -12,7 +12,7 @@ from starlette.responses import Response
 from starlette.types import Scope
 
 from . import auth, db, mahjong, saves, sudoku
-from .config import Settings
+from .config import Settings, from_env
 
 # Hashed names never change their content. Everything else, the entry page and the
 # worker included, is asked about every time, so a new release is seen at the next load.
@@ -67,3 +67,8 @@ def create_app(settings: Settings) -> FastAPI:
     app.mount("/", _Build(directory=settings.static_dir, html=True, check_dir=False))
 
     return app
+
+
+def app_from_env() -> FastAPI:
+    """What the image runs: `uvicorn --factory isoca_play.app:app_from_env`."""
+    return create_app(from_env())

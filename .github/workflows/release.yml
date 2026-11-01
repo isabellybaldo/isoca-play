@@ -1,0 +1,184 @@
+name: release
+
+# A push to main: checks, image pushed, the box told to run that digest, smoke check.
+# Run by hand from main with `rollback` ticked: the box goes back to the previous digest.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      rollback:
+        description: go back to the previous release instead of releasing main
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+# One at a time, in order, rollbacks included.
+concurrency:
+  group: release-play
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/isabellybaldo/isoca-play
+  SITE_URL: https://play.isoca.space
+
+jobs:
+  checks:
+    if: github.ref == 'refs/heads/main' && !inputs.rollback
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: checks
+    if: github.ref == 'refs/heads/main' && !inputs.rollback
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Log in to the registry
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+
+      - name: Build, push and read the digest back
+        id: push
+        run: |
+          [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::bad commit id"; exit 1; }
+          docker buildx build --push --provenance=false --sbom=false --platform linux/amd64 \
+            --build-arg "VERSION=$GITHUB_SHA" --tag "$IMAGE:$GITHUB_SHA" .
+          digest=$(docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" --format '{{.Manifest.Digest}}')
+          [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::the registry gave no digest"; exit 1; }
+          echo "digest=$digest" >>"$GITHUB_OUTPUT"
+
+      - name: Log out of the registry
+        if: always()
+        run: docker logout ghcr.io
+
+  deploy:
+    needs: publish
+    if: github.ref == 'refs/heads/main' && !inputs.rollback
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Check the secrets and write the SSH files
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          missing=0
+          for name in DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_PORT DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::secret $name is empty or missing in the production environment"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] || { echo "::error::DEPLOY_PORT is not a port number"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ssh"
+          printf "%s\n" "$DEPLOY_SSH_KEY" >"$RUNNER_TEMP/ssh/key"
+          printf "%s\n" "$DEPLOY_KNOWN_HOSTS" >"$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/key"
+
+      - name: Release on the box
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DIGEST: ${{ needs.publish.outputs.digest }}
+        run: |
+          [[ "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || { echo "::error::bad digest"; exit 1; }
+          rc=0
+          out=$(ssh -i "$RUNNER_TEMP/ssh/key" -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            -p "$DEPLOY_PORT" "deploy@$DEPLOY_HOST" "release play $DIGEST" </dev/null) || rc=$?
+          echo "$out"
+          [ "$rc" -eq 0 ] || { echo "::error::ssh exited $rc"; exit 1; }
+          grep -qxF "released play $DIGEST" <<<"$out" || { echo "::error::the box did not report released play $DIGEST"; exit 1; }
+
+      - name: Smoke check
+        run: |
+          deadline=$((SECONDS + 120))
+          while :; do
+            login=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$SITE_URL/login") || login=000
+            version=$(curl -sS --max-time 10 "$SITE_URL/healthz" | jq -r '.version') || version=unreadable
+            echo "login $login, version $version"
+            if [ "$login" = 200 ] && [ "$version" = "$GITHUB_SHA" ]; then exit 0; fi
+            [ "$SECONDS" -lt "$deadline" ] || break
+            sleep 10
+          done
+          echo "::error::The release of $GITHUB_SHA was handed to the box, but $SITE_URL did not show it within 2 minutes. If the site is broken, run the rollback: Actions, release, Run workflow from main, tick rollback."
+          exit 1
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"
+
+  rollback:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch' && inputs.rollback
+    runs-on: ubuntu-latest
+    environment: production
+    timeout-minutes: 15
+    steps:
+      - name: Check the secrets and write the SSH files
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+        run: |
+          missing=0
+          for name in DEPLOY_SSH_KEY DEPLOY_HOST DEPLOY_PORT DEPLOY_KNOWN_HOSTS; do
+            if [ -z "${!name}" ]; then
+              echo "::error::secret $name is empty or missing in the production environment"
+              missing=1
+            fi
+          done
+          [ "$missing" -eq 0 ] || exit 1
+          [[ "$DEPLOY_PORT" =~ ^[0-9]{1,5}$ ]] || { echo "::error::DEPLOY_PORT is not a port number"; exit 1; }
+          umask 077
+          mkdir -p "$RUNNER_TEMP/ssh"
+          printf "%s\n" "$DEPLOY_SSH_KEY" >"$RUNNER_TEMP/ssh/key"
+          printf "%s\n" "$DEPLOY_KNOWN_HOSTS" >"$RUNNER_TEMP/ssh/known_hosts"
+          chmod 600 "$RUNNER_TEMP/ssh/key"
+
+      - name: Roll back on the box
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_PORT: ${{ secrets.DEPLOY_PORT }}
+        run: |
+          rc=0
+          out=$(ssh -i "$RUNNER_TEMP/ssh/key" -o UserKnownHostsFile="$RUNNER_TEMP/ssh/known_hosts" \
+            -o IdentitiesOnly=yes -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 \
+            -p "$DEPLOY_PORT" "deploy@$DEPLOY_HOST" "rollback play" </dev/null) || rc=$?
+          echo "$out"
+          [ "$rc" -eq 0 ] || { echo "::error::ssh exited $rc"; exit 1; }
+          grep -qxF "rolled back play" <<<"$out" || { echo "::error::the box did not report rolled back play"; exit 1; }
+
+      - name: Smoke check
+        run: |
+          deadline=$((SECONDS + 120))
+          while :; do
+            login=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 10 "$SITE_URL/login") || login=000
+            echo "login $login"
+            if [ "$login" = 200 ]; then exit 0; fi
+            [ "$SECONDS" -lt "$deadline" ] || break
+            sleep 10
+          done
+          echo "::error::The rollback was handed to the box, but $SITE_URL/login did not answer 200 within 2 minutes."
+          exit 1
+
+      - name: Remove the SSH key
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/ssh"
