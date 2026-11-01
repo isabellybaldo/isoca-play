@@ -29,7 +29,7 @@ test('mahjong goes from setup to a real deal and back, keeping the level', async
   await user.click(screen.getByRole('button', { name: 'Medium' }));
   await user.click(screen.getByRole('button', { name: /^Trophy/ }));
   const board = screen.getByRole('group', { name: 'Board' });
-  expect(within(board).getAllByRole('button')).toHaveLength(58);
+  expect(within(board).getAllByRole('button')).toHaveLength(62);
   expect(within(board).getAllByRole('button', { name: 'Face-down tile' }).length).toBeGreaterThan(0);
 
   await user.click(screen.getByRole('button', { name: 'Back to setup' }));

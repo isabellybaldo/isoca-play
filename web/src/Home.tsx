@@ -1,13 +1,13 @@
 import type { Screen } from './App';
-import { TileArt, TileBack } from './mahjong/TileArt';
+import { FaceArt, TileArt, TileBack } from './mahjong/TileArt';
 
 function MahjongArt() {
   return (
     <span className="game-art" aria-hidden="true">
       <span className="tile heap"><TileArt face="cat" /></span>
       <span className="tile heap"><TileArt face="cherry" /></span>
-      <span className="tile heap back-face"><TileBack /></span>
-      <span className="tile heap"><TileArt face="ghost" /></span>
+      <span className="tile heap"><TileBack /></span>
+      <span className="tile heap"><TileArt face="frog" /></span>
     </span>
   );
 }
@@ -20,7 +20,7 @@ function SudokuArt() {
         <span className="quiet">3</span>
         <span>8</span>
         <span className="quiet">1</span>
-        <span><TileArt face="star" /></span>
+        <span><FaceArt face="heart" /></span>
         <span>7</span>
         <span>6</span>
         <span>2</span>

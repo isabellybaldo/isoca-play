@@ -106,13 +106,24 @@ describe('setup', () => {
   });
 
   test.each([
-    ['easy', 'Flat shapes.'],
+    ['easy', 'Barely stacked.'],
     ['medium', 'Some stacking.'],
     ['hard', 'Taller stacks.'],
   ] as const)('the %s line says only how the shape stacks', (level, line) => {
     render(<MahjongSetup level={level} onLevel={vi.fn()} onStart={vi.fn()} onBack={vi.fn()} />);
     expect(screen.getByText(line)).toBeTruthy();
     expect(screen.queryByText(/free/)).toBeNull();
+  });
+
+  test('the shape drawing shows every tile, upper layers over lower ones', () => {
+    const { container } = render(
+      <MahjongSetup level="hard" onLevel={vi.fn()} onStart={vi.fn()} onBack={vi.fn()} />,
+    );
+    const fort = layoutsFor('hard').find((l) => l.id === 'fort')!;
+    const rects = [...container.querySelector('.mj-shape')!.querySelectorAll('rect')];
+    expect(rects).toHaveLength(fort.cells.length);
+    expect(rects[0].getAttribute('fill')).toBe('#4b3a5c');
+    expect(rects[rects.length - 1].getAttribute('fill')).toBe('#ddfff7');
   });
 
   test('tapping a type starts it, and back goes home', async () => {
@@ -133,9 +144,6 @@ describe('tile states', () => {
     expect(covered.querySelector('svg')!.getAttribute('aria-label')).toBe('face-down tile');
     expect(container.innerHTML).not.toContain('moon');
     expect(screen.queryByRole('button', { name: /moon/i })).toBeNull();
-    // The upper tile casts no shadow, so the face-down edge under it shows.
-    expect(tileButton('Sun tile').classList.contains('is-raised')).toBe(true);
-    expect(covered.classList.contains('is-raised')).toBe(false);
 
     // Once the tile on top has gone, it is face up.
     await user.dblClick(tileButton('Sun tile'));
@@ -170,7 +178,76 @@ describe('tile states', () => {
   });
 });
 
+describe('the tile on the board', () => {
+  test('a face-down tile is the same markup whatever its face', () => {
+    const backOf = (face: string) => {
+      const { unmount } = play([tile(0, face, 0), tile(1, 'frog', 1, 1, 1)]);
+      const html = tileButton('Face-down tile').innerHTML;
+      unmount();
+      return html;
+    };
+    const cat = backOf('cat');
+    expect(cat).toBe(backOf('spring'));
+    expect(cat).not.toContain('cat');
+  });
+
+  test.each([
+    [320, 568, 36, 46, 18, 20],
+    [1366, 768, 54, 69, 27, 30],
+  ])('at %i x %i a tile is whole-number scaled and half a unit is half a pitch', (w, h, tw, th, hx, hy) => {
+    vi.stubGlobal('innerWidth', w);
+    vi.stubGlobal('innerHeight', h);
+    play([tile(0, 'moon', 4, 2), tile(1, 'sun', 5, 3, 1)]);
+    const lower = tileButton('Face-down tile').style;
+    const upper = tileButton('Sun tile').style;
+    expect([upper.width, upper.height]).toEqual([`${tw}px`, `${th}px`]);
+    expect(parseInt(upper.left) - parseInt(lower.left)).toBe(hx);
+    expect(parseInt(upper.top) - parseInt(lower.top)).toBe(hy);
+  });
+
+  test('tiles are painted by layer, then row, then column', () => {
+    play([tile(0, 'sun', 2, 2), tile(1, 'moon', 0, 2), tile(2, 'gem', 1, 1, 1), tile(3, 'cat', 6, 0)]);
+    const order = within(screen.getByRole('group', { name: 'Board' }))
+      .getAllByRole('button')
+      .map((b) => b.getAttribute('aria-label'));
+    expect(order).toEqual(['Cat tile', 'Face-down tile', 'Face-down tile', 'Gem tile']);
+  });
+});
+
+describe('the look in the stylesheet', () => {
+  const css = readFileSync('src/mahjong/mahjong.css', 'utf8');
+  const theme = readFileSync('src/theme.css', 'utf8');
+
+  test('no layer step, shadow or square frame is left on a tile', () => {
+    expect(css).not.toContain('is-raised');
+    expect(theme).toMatch(/\.tile\s*\{[^}]*width:\s*36px;[^}]*height:\s*46px/);
+    expect(theme).not.toMatch(/\.tile\s*\{[^}]*box-shadow/);
+  });
+
+  test('a slot holds one 36 x 46 tile, and the game is wide enough for 8 tiles at 54 px', () => {
+    expect(css).toMatch(/\.mj-slot\s*\{[^}]*width:\s*44px;[^}]*height:\s*54px/);
+    expect(css).toMatch(/\.shell\.mj-game\s*\{[^}]*max-width:\s*464px/);
+  });
+
+  test('the home heap uses a whole-number scale', () => {
+    expect(theme).toMatch(/\.heap\s*\{[^}]*width:\s*54px;[^}]*height:\s*69px/);
+  });
+});
+
 describe('the slot rule', () => {
+  test('a season pairs with another season on screen, and return brings both back', async () => {
+    const { user } = play(apart(['spring', 'winter', 'plum', 'rose']));
+    await user.dblClick(tileButton('Spring tile'));
+    expect(held()).toEqual(['spring']);
+    await user.dblClick(tileButton('Plum tile'));
+    expect(held()).toEqual(['spring', 'plum']);
+    await user.dblClick(tileButton('Winter tile'));
+    expect(held()).toEqual(['plum']);
+    await user.click(screen.getByRole('button', { name: 'Return' }));
+    expect(held()).toEqual(['spring', 'plum']);
+    expect(tileButton('Winter tile')).toBeTruthy();
+  });
+
   test('there are always four slot frames', async () => {
     const { user } = play(apart(['moon', 'sun']));
     expect(slots()).toHaveLength(4);

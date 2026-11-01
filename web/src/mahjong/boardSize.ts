@@ -1,9 +1,23 @@
 import type { Layout } from './layouts';
 
 const SIDE_PADDING = 16; // each side of the viewport
-export const LAYER_STEP = 4; // px an upper layer sits up and left of the one below
-export const TILE_SHADOW_X = 2; // px the hard shadow reaches past a tile, as in mahjong.css
-export const TILE_SHADOW_Y = 3;
+
+// The two sizes of the 18 x 23 sprite: 2x and 3x. Never a fractional scale.
+const SMALL = 36;
+const LARGE = 54;
+
+// Everything above and below the board on the game screen, in px: 12 of padding each
+// end, the 44 px bar, the 54 px slots, the 44 px buttons and the three 8 px gaps.
+export const GAME_CHROME = 12 + 44 + 8 + 54 + 8 + 8 + 44 + 12;
+
+export function tileHeight(width: number): number {
+  return (width * 23) / 18;
+}
+
+// A row is 40/46 of a tile tall, so a tile's rose edge tucks under the row below.
+function rowPitch(width: number): number {
+  return (tileHeight(width) * 40) / 46;
+}
 
 function extent(layout: Layout) {
   const xs = layout.cells.map((c) => c.x);
@@ -12,26 +26,25 @@ function extent(layout: Layout) {
     minX: Math.min(...xs),
     minY: Math.min(...ys),
     // x and y are in half-tile units, and a tile is 2 of them across.
-    columns: (Math.max(...xs) - Math.min(...xs) + 2) / 2,
-    rows: (Math.max(...ys) - Math.min(...ys) + 2) / 2,
-    maxZ: Math.max(...layout.cells.map((c) => c.z)),
+    spanX: (Math.max(...xs) - Math.min(...xs)) / 2,
+    spanY: (Math.max(...ys) - Math.min(...ys)) / 2,
   };
 }
 
-// The largest whole pixel width that fits the viewport with 16 px of side padding.
-export function tileWidth(layout: Layout, viewportWidth: number): number {
-  const { columns, maxZ } = extent(layout);
-  const room = viewportWidth - SIDE_PADDING * 2 - maxZ * LAYER_STEP - TILE_SHADOW_X;
-  return Math.max(1, Math.floor(room / columns));
-}
-
-// Tiles are square, so the same width sets the height.
 export function boardBox(layout: Layout, width: number): { width: number; height: number } {
-  const { columns, rows, maxZ } = extent(layout);
+  const { spanX, spanY } = extent(layout);
   return {
-    width: columns * width + maxZ * LAYER_STEP + TILE_SHADOW_X,
-    height: rows * width + maxZ * LAYER_STEP + TILE_SHADOW_Y,
+    width: spanX * width + width,
+    height: spanY * rowPitch(width) + tileHeight(width),
   };
+}
+
+// 54 px only when the whole board and the rows around it fit the viewport. Otherwise
+// 36 px, the smallest size: a board at most 8 tiles wide and 9 rows tall fits 320 x 568.
+export function tileWidth(layout: Layout, viewportWidth: number, viewportHeight: number): number {
+  const box = boardBox(layout, LARGE);
+  const fits = box.width <= viewportWidth - SIDE_PADDING * 2 && box.height + GAME_CHROME <= viewportHeight;
+  return fits ? LARGE : SMALL;
 }
 
 export function tilePosition(
@@ -39,10 +52,9 @@ export function tilePosition(
   layout: Layout,
   width: number,
 ): { left: number; top: number } {
-  const { minX, minY, maxZ } = extent(layout);
-  const lift = (maxZ - cell.z) * LAYER_STEP;
+  const { minX, minY } = extent(layout);
   return {
-    left: ((cell.x - minX) / 2) * width + lift,
-    top: ((cell.y - minY) / 2) * width + lift,
+    left: ((cell.x - minX) / 2) * width,
+    top: ((cell.y - minY) / 2) * rowPitch(width),
   };
 }

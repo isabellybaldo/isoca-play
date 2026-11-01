@@ -57,19 +57,17 @@ button {
 
 .back.resume { display: block; width: calc(100% - 3px); margin-bottom: 16px; text-align: left; line-height: 1.5; }
 
-/* A tile: the pale face and hard shadow around a drawing. Sized by its parent;
-   a board tile may be narrower than --tap, so it opts out of the button floor. */
-.pixels { display: block; width: 100%; height: auto; }
+/* A tile: the 18 x 23 sprite at a whole-number scale, so 36 x 46 here, 54 x 69 where
+   a rule or the board says so. Its outline and edge are part of the drawing. A board
+   tile is narrower than --tap, so it opts out of the button floor. */
+.pixels { display: block; width: 100%; height: 100%; }
 .tile {
   display: block;
+  width: 36px;
+  height: 46px;
   min-width: 0;
   min-height: 0;
-  padding: 2px;
-  background: var(--fg);
-  border: 2px solid var(--page);
-  box-shadow: 2px 3px 0 var(--rose);
 }
-.tile.back-face { padding: 0; background: var(--rose); }
 
 /* Home */
 .home-title {
@@ -104,11 +102,11 @@ button {
 .game-line { display: block; font-family: var(--big); font-size: 24px; line-height: 1.1; color: var(--dim); }
 
 /* A loose heap of tiles, each lying over the last */
-.heap { position: absolute; width: 68px; }
-.heap:nth-child(1) { left: 0; top: 40px; }
-.heap:nth-child(2) { left: 52px; top: 8px; }
-.heap:nth-child(3) { left: 112px; top: 44px; }
-.heap:nth-child(4) { left: 164px; top: 4px; }
+.heap { position: absolute; width: 54px; height: 69px; }
+.heap:nth-child(1) { left: 0; top: 48px; }
+.heap:nth-child(2) { left: 44px; top: 12px; }
+.heap:nth-child(3) { left: 92px; top: 56px; }
+.heap:nth-child(4) { left: 136px; top: 8px; }
 
 /* A corner of a sudoku board, with a tile sitting in one cell */
 .mini {
@@ -129,7 +127,7 @@ button {
   border: 1px solid var(--line2);
 }
 .mini span.quiet { color: var(--dim); }
-.mini span .pixels { width: 32px; }
+.mini span .pixels { width: 32px; height: 32px; }
 
 /* The question before a new game */
 .dialog-veil {

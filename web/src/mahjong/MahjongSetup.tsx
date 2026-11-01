@@ -3,7 +3,7 @@ import { layoutsFor, type Layout, type Level } from './layouts';
 import './mahjong.css';
 
 const LEVELS: { id: Level; name: string; line: string }[] = [
-  { id: 'easy', name: 'Easy', line: 'Flat shapes.' },
+  { id: 'easy', name: 'Easy', line: 'Barely stacked.' },
   { id: 'medium', name: 'Medium', line: 'Some stacking.' },
   { id: 'hard', name: 'Hard', line: 'Taller stacks.' },
 ];
@@ -12,19 +12,14 @@ const LEVELS: { id: Level; name: string; line: string }[] = [
 const STACK_COLOURS = ['#4b3a5c', '#aa4465', '#ffa69e', '#ddfff7'];
 
 function ShapeDrawing({ layout }: { layout: Layout }) {
-  const tops = new Map<string, { x: number; y: number; z: number }>();
-  for (const cell of layout.cells) {
-    const key = `${cell.x},${cell.y}`;
-    const seen = tops.get(key);
-    if (!seen || cell.z > seen.z) tops.set(key, cell);
-  }
+  const lowestFirst = [...layout.cells].sort((a, b) => a.z - b.z);
   const width = Math.max(...layout.cells.map((c) => c.x)) + 2;
   const height = Math.max(...layout.cells.map((c) => c.y)) + 2;
   return (
     <svg className="mj-shape" viewBox={`0 0 ${width} ${height}`} shapeRendering="crispEdges" aria-hidden="true">
-      {[...tops.values()].map((c) => (
+      {lowestFirst.map((c) => (
         <rect
-          key={`${c.x},${c.y}`}
+          key={`${c.x},${c.y},${c.z}`}
           x={c.x}
           y={c.y}
           width={1.75}

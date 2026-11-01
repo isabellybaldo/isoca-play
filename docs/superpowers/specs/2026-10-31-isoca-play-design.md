@@ -52,10 +52,31 @@ in, and it belongs to one difficulty. The player picks a difficulty, then a type
 that difficulty's list, or presses random to get one from that list. **(call for the
 order and what random covers)**
 
-**Tiles (owner).** Cute pixel tiles, in the owner's pixel theme.
+**Tiles (owner).** Cute pixel tiles, in the owner's pixel theme, all original. A tile
+is one 18 x 23 sprite: a dark outline with cut corners, an ivory face and a rose edge.
+It is only ever shown at a whole-number scale, 36 x 46 or 54 x 69 px, because a
+fractional scale distorts the art. 54 is used only when the whole board fits the
+viewport across and down. The back is rose with a salmon heart.
+
+The set has 42 faces:
+
+- Circles 1-9: the 1 is a plain red disc, the rest solid pips in red, blue and green.
+- Bamboo 1-9: the 1 is a panda.
+- Stars 1-9: the 1 is a moon, the rest violet twinkles.
+- Critters: cat, bunny, frog, fish.
+- Sweets: cherry, cupcake, heart.
+- Seasons: spring, summer, autumn, winter.
+- Flowers: plum, orchid, chrysanthemum, rose.
+
+**Matching (owner).** Any season matches any season, and any flower matches any
+flower. Everything else matches only itself. That makes 36 match kinds. A deal uses a
+random subset when a shape has fewer pairs than that, and a season or flower pair is
+two different faces from its group.
 
 **Hidden tiles (owner confirmed).** A tile with another tile on top of it is face
-down and cannot be clicked. It turns face up once nothing is on top of it.
+down and cannot be clicked. It turns face up once nothing is on top of it. Upper tiles
+sit half a tile off the layer below, never exactly on top, so the rose backs of the
+tiles under them show.
 
 **Free tiles (call).** A face-up tile can be clicked only if its left or right
 side is open, the classic mahjong solitaire rule. Face-up tiles that are blocked at
@@ -90,16 +111,17 @@ much easier to get stuck.
 whole setup. The slot count and other rules are fixed, so the engine and generator
 need no rule parameters.
 
-**Layouts (call).** Start with 4 original shapes per level, 12 in all, inspired by the
-owner's reference picture but not copied from it. The picture shows one difficulty's
+**Layouts (call).** One original shape per level for now: frame, trophy and fort,
+inspired by the owner's reference picture but not copied from it. The picture shows one difficulty's
 list: named silhouettes such as a frame, a jester, overlapping blocks, a trophy, a
 nautilus spiral and an advanced fort. It looks like Microsoft Mahjong, which groups
 its boards the same way. The picture is a
 screenshot of someone else's game, so it stays out of the public repo.
 Every shape must fit a portrait phone with tiles
-large enough to tap reliably, which limits a layout's width, so depth does more of
-the work than on desktop versions. 12 is a starting point, and adding a shape should
-mean adding data only.
+large enough to tap reliably: at most 8 tiles wide and 9 rows tall, so that at
+320 x 568 a 36 px tile leaves Return on screen. Depth does more of the work than on
+desktop versions. A column is one tile wide and a row is 40/46 of a tile tall, so a
+tile's rose edge tucks under the row below. Adding a shape should mean adding data only.
 
 ## Sudoku
 
@@ -272,11 +294,11 @@ A builder cannot judge either, so the work stops for the owner at each check.
    screens, playable enough to react to. No login or server. The owner adjusts it
    before the real build starts.
 2. **First playtest.** Login, saves and deploy in place on `play.isoca.space`, with
-   sudoku and one mahjong shape from each level with draft tiles, so the owner can
+   sudoku and one mahjong shape from each level with the approved tiles, so the owner can
    play on their phone.
 3. **Tuning.** Adjust difficulty and rules feel from what the owner reports. A bot's
    win rate and forced holds can support this, but the owner's verdict decides.
-4. **The rest.** The remaining shapes and the final tile art, with the owner's look at
+4. **The rest.** Any further shapes, with the owner's look at
    each batch.
 
 ## Existing open source to check first (call)
@@ -297,7 +319,7 @@ were read; none of these has been run.
 
 ## Left to the builder
 
-- Tile set size and the pixel art itself, as long as it is original.
+- Further pixel art beyond the approved set, as long as it is original.
 - Exact layouts, tile counts per level, and the deal-difficulty measure.
 - Screen details beyond the drawings, including the home page.
 - Sudoku generation approach, within the grading rule above.

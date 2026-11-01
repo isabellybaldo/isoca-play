@@ -2,6 +2,7 @@ import { describe, expect, test } from 'vitest';
 import {
   isCovered,
   isFree,
+  matchKey,
   newGame,
   tap,
   tapElsewhere,
@@ -263,5 +264,44 @@ describe('undo', () => {
     expect(s.slots).toEqual([]);
     expect(s.onBoard).toEqual([0, 1, 2, 3]);
     expect(s.selected).toBe(null);
+  });
+});
+
+describe('the match rule', () => {
+  test('any season matches any season, any flower any flower, the rest only themselves', () => {
+    for (const season of ['spring', 'summer', 'autumn', 'winter']) expect(matchKey(season)).toBe('season');
+    for (const flower of ['plum', 'orchid', 'chrysanthemum', 'rose']) expect(matchKey(flower)).toBe('flower');
+    expect(matchKey('cat')).toBe('cat');
+    expect(matchKey('circle3')).toBe('circle3');
+    expect(matchKey('circle3')).not.toBe(matchKey('circle4'));
+  });
+
+  test('spring and winter leave as a pair', () => {
+    let s = newGame(pairRow(['spring', 'winter', 'cat', 'cat']));
+    s = send(s, 0);
+    expect(s.slots).toEqual([0]);
+    s = send(s, 1);
+    expect(s.slots).toEqual([]);
+  });
+
+  test('two flowers leave as a pair', () => {
+    const s = send(send(newGame(pairRow(['plum', 'rose'])), 0), 1);
+    expect(s.status).toBe('won');
+  });
+
+  test('a season and a flower do not pair', () => {
+    const s = send(send(newGame(pairRow(['spring', 'plum', 'cat', 'cat'])), 0), 1);
+    expect(s.slots).toEqual([0, 1]);
+  });
+
+  test('undo restores both tiles of a mixed season pair', () => {
+    const start = send(newGame(pairRow(['spring', 'winter', 'cat', 'cat'])), 0);
+    const paired = send(start, 1);
+    expect(paired.onBoard).toEqual([2, 3]);
+    const back = undo(paired);
+    expect(back).toEqual(start);
+    expect(back.slots).toEqual([0]);
+    expect(back.onBoard).toEqual([1, 2, 3]);
+    expect(undo(back).onBoard).toEqual([0, 1, 2, 3]);
   });
 });

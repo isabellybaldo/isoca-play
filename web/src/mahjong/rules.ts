@@ -12,6 +12,17 @@ export type MahjongState = {
 
 export const SLOT_COUNT = 4;
 
+const SEASONS = ['spring', 'summer', 'autumn', 'winter'];
+const FLOWERS = ['plum', 'orchid', 'chrysanthemum', 'rose'];
+
+// Two tiles pair when their keys are equal: any season matches any season, any
+// flower matches any flower, and everything else matches only itself.
+export function matchKey(face: string): string {
+  if (SEASONS.includes(face)) return 'season';
+  if (FLOWERS.includes(face)) return 'flower';
+  return face;
+}
+
 export function newGame(tiles: Tile[]): MahjongState {
   return {
     tiles,
@@ -59,7 +70,11 @@ export function isFree(s: MahjongState, id: number): boolean {
 function send(s: MahjongState, id: number): MahjongState {
   const tile = tileById(s, id)!;
   const onBoard = s.onBoard.filter((b) => b !== id);
-  const pairAt = s.slots.findIndex((slotId) => tileById(s, slotId)?.face === tile.face);
+  const key = matchKey(tile.face);
+  const pairAt = s.slots.findIndex((slotId) => {
+    const held = tileById(s, slotId);
+    return held !== undefined && matchKey(held.face) === key;
+  });
   const slots = pairAt >= 0 ? s.slots.filter((_, i) => i !== pairAt) : [...s.slots, id];
   let status: MahjongState['status'] = 'playing';
   if (slots.length >= SLOT_COUNT) status = 'lost';

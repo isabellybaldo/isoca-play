@@ -1,5 +1,5 @@
 import { FACES, type Layout } from './layouts';
-import { isFree, newGame, type Tile } from './rules';
+import { isFree, matchKey, newGame, type Tile } from './rules';
 
 function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
@@ -21,26 +21,37 @@ function shuffle<T>(items: T[], rand: () => number): T[] {
   return out;
 }
 
-// One face per pair. Each block is a fresh shuffle of every face, so a face only
-// repeats after all the others have been used, and never twice in a row.
-function faceSequence(pairs: number, rand: () => number): string[] {
+const KINDS = [...new Set(FACES.map(matchKey))];
+
+// One match kind per pair. Each block is a fresh shuffle of every kind, so fewer pairs
+// than kinds get a random subset, and a kind only repeats after all the others have
+// been used, never twice in a row.
+function kindSequence(pairs: number, rand: () => number): string[] {
   const out: string[] = [];
   while (out.length < pairs) {
-    let block = shuffle(FACES, rand);
+    let block = shuffle(KINDS, rand);
     if (out.length > 0 && block[0] === out[out.length - 1]) block = [...block.slice(1), block[0]];
     out.push(...block);
   }
   return out.slice(0, pairs);
 }
 
-// Take away two free tiles at a time and give each pair the next face. Played in
+// The two faces of a pair: two different ones from a season or flower group, else one face twice.
+function pairFaces(kind: string, rand: () => number): [string, string] {
+  const group = FACES.filter((face) => matchKey(face) === kind);
+  if (group.length === 1) return [group[0], group[0]];
+  const [first, second] = shuffle(group, rand);
+  return [first, second];
+}
+
+// Take away two free tiles at a time and give each pair the next kind. Played in
 // that order, the deal is a win that never holds more than one tile in the slots.
 function attempt(layout: Layout, rand: () => number): Tile[] | null {
   const tiles: Tile[] = layout.cells.map((c, id) => ({ id, ...c, face: '' }));
-  const faces = faceSequence(tiles.length / 2, rand);
+  const kinds = kindSequence(tiles.length / 2, rand);
   const state = newGame(tiles);
   let remaining = state.onBoard;
-  for (let pair = 0; pair < faces.length; pair++) {
+  for (const kind of kinds) {
     const found: number[] = [];
     for (const id of shuffle(remaining, rand)) {
       if (!isFree({ ...state, onBoard: remaining }, id)) continue;
@@ -48,7 +59,10 @@ function attempt(layout: Layout, rand: () => number): Tile[] | null {
       if (found.length === 2) break;
     }
     if (found.length < 2) return null;
-    for (const id of found) tiles[id].face = faces[pair];
+    const faces = pairFaces(kind, rand);
+    found.forEach((id, i) => {
+      tiles[id].face = faces[i];
+    });
     remaining = remaining.filter((id) => !found.includes(id));
   }
   return tiles;

@@ -1,6 +1,6 @@
 import { useEffect, useState, type MouseEvent } from 'react';
 import ConfirmDialog from '../ConfirmDialog';
-import { boardBox, tilePosition, tileWidth } from './boardSize';
+import { boardBox, tileHeight, tilePosition, tileWidth } from './boardSize';
 import { makeDeal } from './deal';
 import type { Layout } from './layouts';
 import {
@@ -18,11 +18,11 @@ import {
 import { TileArt, TileBack } from './TileArt';
 import './mahjong.css';
 
-// Wider screens get the board of a 440 px one, so its ten rows still fit a laptop.
-const WIDEST_VIEWPORT = 440; // matches the max-width of .mj-game
-
-function viewportWidth(): number {
-  return Math.min(document.documentElement.clientWidth || window.innerWidth, WIDEST_VIEWPORT);
+function measureViewport(): { width: number; height: number } {
+  return {
+    width: document.documentElement.clientWidth || window.innerWidth,
+    height: window.innerHeight,
+  };
 }
 
 export function dealGame(layout: Layout): MahjongState {
@@ -54,8 +54,7 @@ function BoardTile({
   width: number;
   onTap: (id: number) => void;
 }) {
-  const style = { left, top, width, height: width };
-  const base = tile.z > 0 ? 'tile is-raised' : 'tile';
+  const style = { left, top, width, height: tileHeight(width) };
   const click = own(() => onTap(tile.id));
 
   // The face stays out of the page until nothing lies on the tile.
@@ -63,7 +62,7 @@ function BoardTile({
     return (
       <button
         type="button"
-        className={`${base} back-face`}
+        className="tile back-face"
         style={style}
         aria-label="Face-down tile"
         aria-disabled="true"
@@ -80,7 +79,7 @@ function BoardTile({
     return (
       <button
         type="button"
-        className={`${base} is-blocked`}
+        className="tile is-blocked"
         style={style}
         aria-label={`${name}, blocked`}
         aria-disabled="true"
@@ -95,7 +94,7 @@ function BoardTile({
   return (
     <button
       type="button"
-      className={selected ? `${base} is-selected` : base}
+      className={selected ? 'tile is-selected' : 'tile'}
       style={style}
       aria-label={name}
       aria-pressed={selected}
@@ -112,7 +111,7 @@ function EndNote({ state }: { state: MahjongState }) {
   const won = state.status === 'won';
   return (
     <div className={won ? 'mj-end is-won' : 'mj-end is-lost'}>
-      <span className="tile" aria-hidden="true"><TileArt face={won ? 'star' : 'ghost'} /></span>
+      <span className="tile" aria-hidden="true"><TileArt face={won ? 'heart' : 'star1'} /></span>
       <p className="mj-end-title">{won ? 'You won' : 'You lost'}</p>
       <p className="mj-end-line">
         {won
@@ -134,11 +133,11 @@ export default function MahjongGame({
   onChange: (update: (s: MahjongState) => MahjongState) => void;
   onBack: () => void;
 }) {
-  const [viewport, setViewport] = useState(viewportWidth);
+  const [viewport, setViewport] = useState(measureViewport);
   const [asking, setAsking] = useState(false);
 
   useEffect(() => {
-    const measure = () => setViewport(viewportWidth());
+    const measure = () => setViewport(measureViewport());
     window.addEventListener('resize', measure);
     return () => window.removeEventListener('resize', measure);
   }, []);
@@ -147,7 +146,7 @@ export default function MahjongGame({
     const next = dealGame(layout);
     onChange(() => next);
   };
-  const width = tileWidth(layout, viewport);
+  const width = tileWidth(layout, viewport.width, viewport.height);
   const box = boardBox(layout, width);
   // Lower layers first, and each row left to right, so upper tiles lie on top.
   const tiles = state.tiles
