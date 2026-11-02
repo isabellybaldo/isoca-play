@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "isoca-play"
 version = "0.1.0"
-description = "Private sudoku and mahjong site: the service behind web/"
+description = "Private sudoku, mahjong and solitaire site: the service behind web/"
 requires-python = ">=3.10"
 dependencies = ["fastapi", "uvicorn", "argon2-cffi"]
 
