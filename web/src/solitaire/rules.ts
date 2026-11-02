@@ -45,7 +45,12 @@ export function newSolitaire(deal: number[]): SolitaireState {
 const PILE = /^(?:w|f[0-3]|c[0-6])$/;
 const MOVE = /^([wfc][0-6]?)>([fc][0-6]):([1-9]\d*)$/;
 
+const HISTORY_ENTRY = /^(?:d|r|(?:w|f[0-3]|c[0-6])>(?:f[0-3]|c[0-6]):[1-9]\d*!?)$/;
+
 const isPile = (text: string): text is Pile => PILE.test(text);
+
+// Whether undo can read this. A save from elsewhere is checked with it, as undo trusts history.
+export const isHistoryEntry = (entry: unknown): boolean => typeof entry === 'string' && HISTORY_ENTRY.test(entry);
 
 // A copy to change; the state it came from is never touched.
 function copy(s: SolitaireState): SolitaireState {

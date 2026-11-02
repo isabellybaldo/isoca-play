@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { blanked, fakeServer, goOffline } from './fakeServer.testutil';
 import { LAYOUTS } from './mahjong/layouts';
 import { isFree, newGame, tap, tapElsewhere } from './mahjong/rules';
+import { newSolitaire, tapPile, type SolitaireState } from './solitaire/rules';
 import { newSudoku, pressDigit, selectCell, setMode } from './sudoku/rules';
 import { useSavedGame } from './useSavedGame';
 
@@ -258,6 +259,70 @@ test('a mahjong selection sends nothing; the move does', async () => {
   change((s) => tap(s, id));
   await pass();
   expect(server.puts('mahjong')).toHaveLength(1);
+});
+
+describe('a solitaire save', () => {
+  const DEAL = Array.from({ length: 52 }, (_, i) => i);
+  const OK = newSolitaire(DEAL);
+  const PLAYED = tapPile(OK);
+  const openSolitaire = async () => {
+    const view = renderHook(() => useSavedGame('solitaire'));
+    await pass();
+    return view;
+  };
+
+  test.each<[string, unknown]>([
+    ['not an object', 'nope'],
+    ['a deal of 51 cards', { ...OK, deal: DEAL.slice(1) }],
+    ['a deal of 53 cards', { ...OK, deal: [...DEAL, 0] }],
+    ['a deal with a card twice', { ...OK, deal: [0, ...DEAL.slice(1, 51), 0] }],
+    ['a deal with no such card', { ...OK, deal: [52, ...DEAL.slice(1)] }],
+    ['a deal of words', { ...OK, deal: DEAL.map(String) }],
+    ['a card missing from the piles', { ...OK, stock: OK.stock.slice(1) }],
+    ['a card too many in the piles', { ...OK, waste: [OK.stock[0]] }],
+    ['a card too many on the answer piles', { ...OK, foundations: [1, 0, 0, 0] }],
+    ['a pile holding no such card', { ...OK, stock: [99, ...OK.stock.slice(1)] }],
+    ['six columns', { ...OK, columns: OK.columns.slice(1) }],
+    ['a column with no up', { ...OK, columns: [{ down: [] }, ...OK.columns.slice(1)] }],
+    ['three answer piles', { ...OK, foundations: [0, 0, 0] }],
+    ['an answer pile too high', { ...OK, stock: OK.stock.slice(14), foundations: [14, 0, 0, 0] }],
+    ['an answer pile below nothing', { ...OK, stock: [...OK.stock, 0], foundations: [-1, 0, 0, 0] }],
+    ['an unknown status', { ...OK, status: 'lost' }],
+    ['no status', { ...OK, status: undefined }],
+    ['no history', { ...OK, history: {} }],
+    ['a history entry that is no move', { ...OK, history: ['d', 'nonsense'] }],
+    ['a history entry that is no string', { ...OK, history: [7] }],
+  ])('with %s cannot be opened', async (_name, body) => {
+    const server = fakeServer({ solitaire: body });
+    const { result } = await openSolitaire();
+    expect(result.current.state).toBeNull();
+    expect(result.current.unplayable).toBe(true);
+    expect(server.puts('solitaire')).toEqual([]);
+  });
+
+  test.each<[string, unknown]>([
+    ['a new deal', OK],
+    ['moves', PLAYED],
+    ['a win', { ...OK, stock: [], columns: OK.columns.map(() => ({ down: [], up: [] })), foundations: [13, 13, 13, 13], history: ['c0>f0:1'], status: 'won' }],
+    ['unknown extra fields', { ...PLAYED, later: { any: 'thing' } }],
+  ])('with %s opens', async (_name, body) => {
+    fakeServer({ solitaire: body });
+    const { result } = await openSolitaire();
+    expect(result.current.unplayable).toBe(false);
+    expect(result.current.state).toEqual(body);
+  });
+
+  test.each<[string, (s: SolitaireState) => SolitaireState, number]>([
+    ['a change of deal', (s) => ({ ...s, deal: [...s.deal] }), 1],
+    ['a change of history', (s) => ({ ...s, history: [...s.history] }), 1],
+    ['anything else', (s) => ({ ...s, stock: [...s.stock] }), 0],
+  ])('%s decides whether it is a move', async (_name, change, puts) => {
+    const server = fakeServer({ solitaire: OK });
+    const { result } = await openSolitaire();
+    act(() => result.current.setState((s) => change(s!)));
+    await pass();
+    expect(server.puts('solitaire')).toHaveLength(puts);
+  });
 });
 
 const wake = {

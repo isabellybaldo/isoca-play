@@ -20,11 +20,13 @@ function measureViewport() {
 }
 
 // A tip belongs to the position it was asked in, so any move or Return drops it.
-export function useTip(state: SolitaireState): { tip: Tip | null; ask: () => void } {
+export function useTip(state: SolitaireState | null): { tip: Tip | null; ask: () => void } {
   const [held, setHeld] = useState<{ tip: Tip; history: SolitaireState['history'] } | null>(null);
   return {
-    tip: held && held.history === state.history ? held.tip : null,
-    ask: () => setHeld({ tip: tipFor(state), history: state.history }),
+    tip: held && held.history === state?.history ? held.tip : null,
+    ask: () => {
+      if (state) setHeld({ tip: tipFor(state), history: state.history });
+    },
   };
 }
 

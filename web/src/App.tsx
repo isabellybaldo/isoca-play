@@ -22,10 +22,11 @@ import { clearDevice } from './offline';
 import ResumeButton from './ResumeButton';
 import { useSlotsSetting } from './mahjong/slotsSetting';
 import SaveMarker from './SaveMarker';
+import SolitaireGame from './solitaire/SolitaireGame';
 import SudokuGame from './sudoku/SudokuGame';
 import { useOnline, useSavedGame, type MahjongSave } from './useSavedGame';
 
-export type Screen = 'home' | 'mahjong' | 'sudoku';
+export type Screen = 'home' | 'mahjong' | 'solitaire' | 'sudoku';
 
 function Mahjong({
   level,
@@ -150,11 +151,12 @@ export default function App() {
   const [askingLogout, setAskingLogout] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const mahjong = useSavedGame('mahjong');
+  const solitaire = useSavedGame('solitaire');
   const sudoku = useSavedGame('sudoku');
   const online = useOnline();
   const goHome = () => setScreen('home');
-  const sessionGone = mahjong.signedOut || sudoku.signedOut;
-  const sessionAlive = mahjong.signedIn || sudoku.signedIn;
+  const sessionGone = mahjong.signedOut || solitaire.signedOut || sudoku.signedOut;
+  const sessionAlive = mahjong.signedIn || solitaire.signedIn || sudoku.signedIn;
 
   useEffect(takeLoggedInMark, []);
 
@@ -170,7 +172,7 @@ export default function App() {
     setLeaving(true);
     // A save still on its way would otherwise arrive after the session has ended.
     setLogoutNote('Saving your last moves.');
-    const sent = await Promise.all([mahjong.flush(), sudoku.flush()]);
+    const sent = await Promise.all([mahjong.flush(), solitaire.flush(), sudoku.flush()]);
     setLogoutNote('');
     if (sent.every(Boolean)) await endSession();
     else {
@@ -230,6 +232,19 @@ export default function App() {
       />
       </GameBoundary>
     );
+  } else if (screen === 'solitaire') {
+    shown = (
+      <GameBoundary name="Solitaire" onNewGame={solitaire.giveUp} onHome={goHome}>
+      <SolitaireGame
+        game={solitaire.state}
+        onGame={solitaire.setState}
+        ready={solitaire.ready}
+        online={online}
+        unplayable={solitaire.unplayable}
+        onBack={goHome}
+      />
+      </GameBoundary>
+    );
   } else if (screen === 'sudoku') {
     shown = (
       <GameBoundary name="Sudoku" onNewGame={sudoku.giveUp} onHome={goHome}>
@@ -256,15 +271,15 @@ export default function App() {
     );
   }
 
-  const worst = [mahjong.saving, sudoku.saving];
+  const worst = [mahjong.saving, solitaire.saving, sudoku.saving];
   return (
     <>
       {shown}
       <SaveMarker
         saving={!online || worst.includes('offline') ? 'offline' : worst.includes('retrying') ? 'retrying' : 'saved'}
-        signedOut={online && (mahjong.signedOut || sudoku.signedOut)}
-        refused={mahjong.refused || sudoku.refused}
-        checking={mahjong.checking || sudoku.checking}
+        signedOut={online && sessionGone}
+        refused={mahjong.refused || solitaire.refused || sudoku.refused}
+        checking={mahjong.checking || solitaire.checking || sudoku.checking}
       />
       {askingLogout && (
         <ConfirmDialog

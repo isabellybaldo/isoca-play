@@ -705,7 +705,7 @@ describe('the server', () => {
 
     test('a boot answered only from the device does not claim a session, and keeps the flag for later', async () => {
       sessionStorage.setItem(FLAG, '1');
-      server.worker = { sudoku: null, mahjong: null };
+      server.worker = { sudoku: null, mahjong: null, solitaire: null };
       await open();
       expect(screen.queryByText(NOTE)).toBeNull();
       expect(sessionStorage.getItem(FLAG)).toBe('1');
@@ -820,7 +820,7 @@ describe('the server', () => {
   });
 
   test('a load answered from the cache shows the marker, even if the browser says online', async () => {
-    server.worker = { sudoku: null, mahjong: null };
+    server.worker = { sudoku: null, mahjong: null, solitaire: null };
     const { container } = await open();
     expect(container.querySelector('.save-marker')!.textContent).toBe('Offline, not saved yet.');
     expect(server.requests.some((r) => r.method === 'PUT')).toBe(false);

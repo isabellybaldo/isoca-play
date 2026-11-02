@@ -21,6 +21,9 @@ const PACK = [
   blanked('hard', [60, 61, 62]),
 ];
 
+// Two deals are enough: the screens only need one that is not the one on show.
+export const DEALS = [Array.from({ length: 52 }, (_, i) => i), Array.from({ length: 52 }, (_, i) => 51 - i)];
+
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
@@ -95,6 +98,9 @@ export function fakeServer(saves: Record<string, unknown> = {}) {
     }
     if (path === '/api/new/sudoku') {
       return json(PACK.find((p) => p.level === body.level && p.givens !== body.not)!);
+    }
+    if (path === '/api/new/solitaire') {
+      return json({ deal: DEALS.find((d) => JSON.stringify(d) !== JSON.stringify(body.not)) });
     }
     if (path === '/logout') return new Response(null, { status: 200 });
     return json({ detail: 'no route' }, 404);

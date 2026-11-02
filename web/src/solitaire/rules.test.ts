@@ -3,6 +3,7 @@ import rawCases from '../../../shared/solitaire-cases.json';
 import {
   applyMove,
   canMove,
+  isHistoryEntry,
   move,
   newSolitaire,
   sendUp,
@@ -287,6 +288,40 @@ describe('shared cases', () => {
       expect(s.status).toBe(walk.status);
       while (s.history.length) s = undo(s);
       expect(s).toEqual(newSolitaire(walk.deal));
+    }
+  });
+});
+
+describe('saving', () => {
+  test('a game of 20,000 moves saves in under 512 KB', () => {
+    let s = newSolitaire(identityDeal);
+    for (let i = 0; i < 20_000; i++) s = tapPile(s);
+    expect(s.history).toHaveLength(20_000);
+    expect(s.history).toContain('r');
+    expect(JSON.stringify(s).length).toBeLessThan(512 * 1024);
+  });
+
+  test.each(['d', 'r', 'w>c0:1', 'w>f3:1', 'f2>c6:1', 'c3>c5:2', 'c3>c5:12!', 'c0>f0:1!'])('%s is a history entry', (entry) => {
+    expect(isHistoryEntry(entry)).toBe(true);
+  });
+
+  test.each(['', 'x', 'dd', 'd!', 'r!', 'c3>c5', 'c3>c5:0', 'c3>c5:-1', 'c7>c5:1', 'c3>w:1', 'w1>c0:1', 'f4>c0:1', 'c3>c5:2!!', 'c3!>c5:2', ' d', 'c3>c5:2\n'])(
+    '%j is not a history entry',
+    (entry) => {
+      expect(isHistoryEntry(entry)).toBe(false);
+    },
+  );
+
+  test('anything but a string is not a history entry', () => {
+    for (const entry of [1, null, undefined, ['d'], {}]) expect(isHistoryEntry(entry)).toBe(false);
+  });
+
+  test('every entry the rules write is a history entry', () => {
+    for (const walk of rawCases as Walk[]) {
+      let s = newSolitaire(walk.deal);
+      for (const step of walk.steps) s = applyMove(s, step.move);
+      expect(s.history.length).toBeGreaterThan(0);
+      expect(s.history.every(isHistoryEntry)).toBe(true);
     }
   });
 });

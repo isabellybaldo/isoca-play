@@ -5,6 +5,43 @@
   overflow: hidden;
 }
 
+/* The room around the table is TABLE_CHROME: 8 + 44 bar + 6 + 44 line + 6, and 8 under it. */
+.sol-game {
+  padding-top: 8px;
+}
+
+/* One row on a 320 px phone: the labels are short, so only the padding has to give. */
+.sol-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  height: 44px;
+  max-width: 480px;
+  margin: 0 auto 6px;
+  padding: 0 11px 0 8px; /* 3 px more on the right for the buttons' shadow */
+}
+.sol-bar .back {
+  flex: none;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+/* Always here, so the table never moves. Two lines of this size fit, and the longest tip needs two. */
+.sol-line {
+  height: 44px;
+  margin-bottom: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: var(--big);
+  font-size: 18px;
+  line-height: 1.1;
+  color: var(--accent);
+}
+
 /* The theme's touch-action: manipulation matches every element, so opting out of panning
    has to reach every element too. Without this a drag on a card would pan, and be cancelled. */
 .sol-table,

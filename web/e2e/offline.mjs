@@ -262,7 +262,10 @@ try {
     }, `/api/save/${game}`);
   const waitWorker = async (p = page) => {
     await p.waitForFunction(() => navigator.serviceWorker.controller !== null, null, { timeout: 15000 });
-    await until(async () => (await held('sudoku', p)) && (await held('mahjong', p)), 'the saves are kept');
+    await until(
+      async () => (await held('sudoku', p)) && (await held('mahjong', p)) && (await held('solitaire', p)),
+      'the saves are kept',
+    );
   };
   const reload = (p = page) => p.reload({ waitUntil: 'load' });
   const home = (p = page) => p.getByRole('heading', { name: 'isoca play' }).waitFor();
@@ -321,9 +324,24 @@ try {
   await button(page, 'Back to setup').click();
   await button(page, 'Back to home').click();
 
+  // Inside a check: a run with no way to this screen fails here, not everywhere after it.
+  await check('solitaire deals with no tap, and a move saves', async () => {
+    let dealt = saved(page, 'solitaire');
+    await button(page, /Solitaire/).click();
+    await dealt;
+    dealt = saved(page, 'solitaire');
+    await button(page, 'Pile, 24 cards').click();
+    await dealt;
+    await button(page, 'Pile, 23 cards').waitFor();
+    await button(page, 'Back to home').click();
+    await home();
+  });
+
   await check('the kept save is the one the server confirmed', async () => {
     same(await heldMoves('sudoku'), 1, 'moves kept');
     same((await serverSave('sudoku')).body, JSON.parse((await held('sudoku')).text), 'against the server');
+    same(await heldMoves('solitaire'), 1, 'solitaire moves kept');
+    same((await serverSave('solitaire')).body, JSON.parse((await held('solitaire')).text), 'solitaire against the server');
   });
 
   console.log('-- load once, go offline, reload');
@@ -370,6 +388,16 @@ try {
     await button(page, 'Back to setup').click();
     yes(await button(page, /^Frame/).isDisabled(), 'a new deal is enabled offline');
     await button(page, 'Back to home').click();
+  });
+  await check('solitaire resumes offline too', async () => {
+    await button(page, /Solitaire/).click();
+    await button(page, 'Pile, 23 cards').waitFor();
+    yes(await button(page, 'New game').isDisabled(), 'New game is enabled offline');
+    await page.getByText('New games need a connection.').waitFor();
+    await button(page, 'Return').click();
+    await button(page, 'Pile, 24 cards').waitFor();
+    await button(page, 'Back to home').click();
+    await home();
   });
   await check('log out offline: disabled, with the note', async () => {
     yes(await button(page, 'Log out').isDisabled(), 'Log out is enabled');

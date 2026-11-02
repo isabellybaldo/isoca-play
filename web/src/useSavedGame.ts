@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState, type SetStateAction } from 'react';
 import { ApiError, loadSave, putSave, type GameName } from './api';
 import { LAYOUTS } from './mahjong/layouts';
 import type { MahjongState } from './mahjong/rules';
-import type { SolitaireState } from './solitaire/rules';
+import { isHistoryEntry, type SolitaireState } from './solitaire/rules';
 import type { SudokuState } from './sudoku/rules';
 
 // A mahjong save names its layout, and the app looks the shape up. A sudoku state
@@ -69,21 +69,28 @@ function isPlayableSudoku(body: unknown): boolean {
   );
 }
 
-// Only the shape is checked here: the rules own what a legal position is.
+const isCards = (value: unknown): value is number[] =>
+  isNumbers(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n < 52);
+
+// All 52 cards are somewhere, and undo can read the history. Unknown fields are welcome. The
+// rules own what a legal position is.
 function isPlayableSolitaire(body: unknown): boolean {
-  if (!isRecord(body)) return false;
+  if (!isRecord(body) || !isCards(body.deal) || body.deal.length !== 52 || new Set(body.deal).size !== 52) return false;
+  const { stock, waste, columns, foundations, history, status } = body;
+  if (!isCards(stock) || !isCards(waste)) return false;
+  if (!Array.isArray(columns) || columns.length !== 7) return false;
+  if (!columns.every((c) => isRecord(c) && isCards(c.down) && isCards(c.up))) return false;
+  if (!isNumbers(foundations) || foundations.length !== 4) return false;
+  if (!foundations.every((n) => Number.isInteger(n) && n >= 0 && n <= 13)) return false;
+  const cards = (columns as { down: number[]; up: number[] }[]).reduce(
+    (sum, c) => sum + c.down.length + c.up.length,
+    stock.length + waste.length + foundations.reduce((a, b) => a + b, 0),
+  );
   return (
-    isNumbers(body.deal) &&
-    body.deal.length === 52 &&
-    isNumbers(body.stock) &&
-    isNumbers(body.waste) &&
-    Array.isArray(body.columns) &&
-    body.columns.length === 7 &&
-    body.columns.every((c) => isRecord(c) && isNumbers(c.down) && isNumbers(c.up)) &&
-    isNumbers(body.foundations) &&
-    body.foundations.length === 4 &&
-    Array.isArray(body.history) &&
-    ['playing', 'won'].includes(body.status as string)
+    cards === 52 &&
+    Array.isArray(history) &&
+    history.every(isHistoryEntry) &&
+    ['playing', 'won'].includes(status as string)
   );
 }
 
@@ -102,13 +109,7 @@ const MOVED: { [G in GameName]: (a: Saved[G], b: Saved[G]) => boolean } = {
     a.state.onBoard !== b.state.onBoard ||
     a.state.slots !== b.state.slots ||
     a.state.history !== b.state.history,
-  solitaire: (a, b) =>
-    a.deal !== b.deal ||
-    a.stock !== b.stock ||
-    a.waste !== b.waste ||
-    a.columns !== b.columns ||
-    a.foundations !== b.foundations ||
-    a.history !== b.history,
+  solitaire: (a, b) => a.deal !== b.deal || a.history !== b.history,
   sudoku: (a, b) =>
     a.puzzle !== b.puzzle || a.values !== b.values || a.notes !== b.notes || a.history !== b.history,
 };
