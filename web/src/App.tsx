@@ -25,10 +25,11 @@ import SaveMarker from './SaveMarker';
 import { sendRecords } from './stats/outbox';
 import { useTracked, type Tracker } from './stats/useTracked';
 import SolitaireGame from './solitaire/SolitaireGame';
+import Stats from './Stats';
 import SudokuGame from './sudoku/SudokuGame';
 import { useOnline, useSavedGame, type MahjongSave } from './useSavedGame';
 
-export type Screen = 'home' | 'mahjong' | 'solitaire' | 'sudoku';
+export type Screen = 'home' | 'mahjong' | 'solitaire' | 'sudoku' | 'stats';
 
 function Mahjong({
   level,
@@ -282,6 +283,8 @@ export default function App() {
       />
       </GameBoundary>
     );
+  } else if (screen === 'stats') {
+    shown = <Stats online={online} onBack={goHome} />;
   } else {
     shown = (
       <Home

@@ -14,7 +14,7 @@ type Link<G extends GameName> = {
 };
 
 // The device's own calendar: a day is the day it was where the player is.
-function localDay(): string {
+export function localDay(): string {
   const now = new Date();
   const two = (n: number) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${two(now.getMonth() + 1)}-${two(now.getDate())}`;

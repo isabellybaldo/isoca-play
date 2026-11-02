@@ -78,6 +78,7 @@ export default function Home({
         </button>
       </div>
       <div className="home-foot">
+        <button type="button" className="back" disabled={leaving} onClick={() => onOpen('stats')}>Stats</button>
         <button type="button" className="back" disabled={logOutDisabled || leaving} onClick={onLogOut}>Log out</button>
         {note && <p className="start-note" aria-live="polite">{note}</p>}
       </div>

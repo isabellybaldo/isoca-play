@@ -180,3 +180,11 @@ button {
 .save-marker a { color: var(--accent); pointer-events: auto; }
 
 .boundary-actions { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 16px; }
+
+/* Stats: plain lists that wrap inside the phone width */
+.stats-screen { max-width: 520px; display: grid; gap: 16px; justify-items: start; }
+.stats-title { font-family: var(--px); font-size: 20px; line-height: 1.4; font-weight: 400; text-shadow: 2px 2px 0 var(--accent); }
+.stats-screen section { display: grid; gap: 6px; width: 100%; }
+.stats-screen h2 { font-family: var(--px); font-size: 11px; line-height: 1.4; font-weight: 400; color: var(--accent); }
+.stats-screen ul { list-style: none; display: grid; gap: 2px; font-family: var(--big); font-size: 20px; line-height: 1.15; overflow-wrap: anywhere; }
+.stats-note { font-family: var(--big); font-size: 22px; line-height: 1.1; color: var(--dim); }
