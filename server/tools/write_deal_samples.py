@@ -8,17 +8,18 @@ file falls behind make_deal.
 import json
 from pathlib import Path
 
-from isoca_play.mahjong import LAYOUTS, make_deal
+from isoca_play.mahjong import LAYOUTS, make_deal_with_order
 
 TARGET = Path(__file__).resolve().parents[2] / "shared" / "deal-samples.json"
 
 
+def sample(layout, seed) -> dict:
+    tiles, order = make_deal_with_order(layout, seed)
+    return {"layout": layout["id"], "seed": seed, "tiles": tiles, "order": order}
+
+
 def main() -> None:
-    samples = [
-        {"layout": layout["id"], "seed": seed, "tiles": make_deal(layout, seed)}
-        for layout in LAYOUTS
-        for seed in range(1, 21)
-    ]
+    samples = [sample(layout, seed) for layout in LAYOUTS for seed in range(1, 21)]
     lines = ",\n".join(json.dumps(s, separators=(",", ":")) for s in samples)
     TARGET.write_text(f"[\n{lines}\n]\n", encoding="utf-8", newline="\n")
 

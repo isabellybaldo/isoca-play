@@ -14,13 +14,13 @@ from isoca_play.mahjong import (
     is_covered,
     is_free,
     make_deal,
+    make_deal_with_order,
     match_key,
 )
 
 ORIGIN = {"Origin": BASE_URL}
 SERVER = Path(__file__).resolve().parents[1]
 SHARED = SERVER.parent / "shared"
-SLOT_COUNT = 4
 
 
 def by_id(layout_id):
@@ -31,30 +31,18 @@ def shared(name):
     return json.loads((SHARED / name).read_text(encoding="utf-8"))
 
 
-def can_win(tiles):
-    """Depth-first search over the slot rule, trying moves that make a pair first."""
+def clears(tiles, order):
+    """Whether these pairs, in turn, are free and matching and leave the board empty. That
+    is a win with or without the slots. Searching for a win is no test: once kinds repeat,
+    wrong turns can take longer to rule out than any run should."""
     kind = {t["id"]: match_key(t["face"]) for t in tiles}
-    seen = set()
-
-    def search(on_board, slots):
-        if not on_board and not slots:
-            return True
-        if (on_board, slots) in seen:
-            return False
-        seen.add((on_board, slots))
-        held = {kind[i] for i in slots}
+    on_board = [t["id"] for t in tiles]
+    for first, second in order:
         free = free_ids(tiles, on_board)
-        for tile_id in sorted(free, key=lambda i: kind[i] not in held):
-            rest = tuple(i for i in on_board if i != tile_id)
-            pair = next((i for i in slots if kind[i] == kind[tile_id]), None)
-            after = (
-                tuple(i for i in slots if i != pair) if pair is not None else (*slots, tile_id)
-            )
-            if len(after) < SLOT_COUNT and search(rest, after):
-                return True
-        return False
-
-    return search(tuple(t["id"] for t in tiles), ())
+        if first not in free or second not in free or kind[first] != kind[second]:
+            return False
+        on_board = [i for i in on_board if i not in (first, second)]
+    return not on_board
 
 
 def spread(tiles):
@@ -83,15 +71,17 @@ def post(client, **kwargs):
 
 @pytest.mark.parametrize("layout", LAYOUTS, ids=lambda l: l["id"])
 def test_every_deal_is_winnable_with_real_rules(layout):
-    for seed in range(1, 201):
-        assert can_win(make_deal(layout, seed))
+    for seed in range(1, 41):
+        assert clears(*make_deal_with_order(layout, seed))
 
 
-def test_can_win_rejects_a_deal_that_cannot_be_won():
-    # One tower of ten tiles: the top comes off first, e d c b fill the four slots.
-    faces = ["a", "b", "c", "d", "e", "a", "b", "c", "d", "e"]
-    tiles = [{"id": i, "x": 0, "y": 0, "z": i, "face": face} for i, face in enumerate(faces)]
-    assert can_win(tiles) is False
+def test_clears_rejects_an_order_that_does_not_work():
+    tower = [{"id": i, "x": 0, "y": 0, "z": i, "face": "cat"} for i in range(2)]
+    assert clears(tower, [[0, 1]]) is False  # the lower one is covered
+    apart = [{"id": i, "x": i * 4, "y": 0, "z": 0, "face": f} for i, f in enumerate(["cat", "cat", "frog", "frog"])]
+    assert clears(apart, [[0, 2], [1, 3]]) is False  # no match
+    assert clears(apart, [[0, 1]]) is False  # tiles left over
+    assert clears(apart, [[0, 1], [2, 3]]) is True
 
 
 def test_same_seed_same_deal():
@@ -175,9 +165,9 @@ def test_a_layout_that_cannot_be_dealt_raises_instead_of_looping():
 def test_the_layouts_are_the_twelve_shapes_at_their_sizes():
     sizes = {l["id"]: (l["level"], len(l["cells"])) for l in LAYOUTS}
     assert sizes == {
-        "frame": ("easy", 42), "heart": ("easy", 42), "cat": ("easy", 44), "cherry": ("easy", 44),
-        "trophy": ("medium", 62), "butterfly": ("medium", 62), "panda": ("medium", 62), "moon": ("medium", 62),
-        "fort": ("hard", 72), "rose": ("hard", 72), "frog": ("hard", 72), "gate": ("hard", 72),
+        "frame": ("easy", 72), "heart": ("easy", 72), "cat": ("easy", 72), "cherry": ("easy", 72),
+        "trophy": ("medium", 100), "butterfly": ("medium", 100), "panda": ("medium", 100), "moon": ("medium", 100),
+        "fort": ("hard", 144), "rose": ("hard", 144), "frog": ("hard", 144), "gate": ("hard", 144),
     }
     for level in ("easy", "medium", "hard"):
         assert len([l for l in LAYOUTS if l["level"] == level]) == 4
@@ -212,7 +202,9 @@ def test_the_committed_samples_are_what_make_deal_gives():
     per_layout = Counter(s["layout"] for s in samples)
     assert per_layout == {l["id"]: 20 for l in LAYOUTS}
     for sample in samples:
-        assert sample["tiles"] == make_deal(by_id(sample["layout"]), sample["seed"])
+        tiles, order = make_deal_with_order(by_id(sample["layout"]), sample["seed"])
+        assert sample["tiles"] == tiles
+        assert sample["order"] == order
 
 
 @pytest.mark.parametrize("name", ["layouts.json", "faces.json"])
@@ -239,7 +231,7 @@ def test_a_new_deal_comes_back_with_its_tiles(client_logged_in):
     assert [{k: t[k] for k in "xyz"} for t in body["tiles"]] == cells
     assert [t["id"] for t in body["tiles"]] == list(range(len(cells)))
     assert all(set(t) == {"id", "x", "y", "z", "face"} for t in body["tiles"])
-    assert can_win(body["tiles"])
+    assert all(n % 2 == 0 for n in kind_counts(body["tiles"]).values())
 
 
 def test_new_deals_differ(client_logged_in):

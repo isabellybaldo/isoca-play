@@ -187,11 +187,13 @@ def _pair_faces(kind: str, rand: Callable[[], float]) -> tuple[str, str]:
     return first, second
 
 
-def _attempt(layout: Layout, rand: Callable[[], float]) -> list[Tile] | None:
+def _attempt(layout: Layout, rand: Callable[[], float]) -> tuple[list[Tile], list[list[int]]] | None:
     """Take away two free tiles at a time and give each pair the next kind. Played in
-    that order, the deal is a win that never holds more than one tile in the slots."""
+    that order, returned with the tiles, the deal is a win that never holds more than
+    one tile in the slots."""
     tiles: list[Tile] = [{"id": i, **cell, "face": ""} for i, cell in enumerate(layout["cells"])]
     remaining = [t["id"] for t in tiles]
+    order: list[list[int]] = []
     for kind in _kind_sequence(len(tiles) // 2, rand):
         free = set(free_ids(tiles, remaining))
         found: list[int] = []
@@ -205,16 +207,22 @@ def _attempt(layout: Layout, rand: Callable[[], float]) -> list[Tile] | None:
         for tile_id, face in zip(found, _pair_faces(kind, rand)):
             tiles[tile_id]["face"] = face
         remaining = [i for i in remaining if i not in found]
-    return tiles
+        order.append(found)
+    return tiles, order
+
+
+def make_deal_with_order(layout: Layout, seed: int) -> tuple[list[Tile], list[list[int]]]:
+    """The deal, and the pairs in the order that clears it."""
+    rand = _mulberry32(seed)
+    for _ in range(MAX_ATTEMPTS):
+        dealt = _attempt(layout, rand)
+        if dealt is not None:
+            return dealt
+    raise DealError(f"no deal for layout {layout['id']!r} after {MAX_ATTEMPTS} attempts")
 
 
 def make_deal(layout: Layout, seed: int) -> list[Tile]:
-    rand = _mulberry32(seed)
-    for _ in range(MAX_ATTEMPTS):
-        tiles = _attempt(layout, rand)
-        if tiles is not None:
-            return tiles
-    raise DealError(f"no deal for layout {layout['id']!r} after {MAX_ATTEMPTS} attempts")
+    return make_deal_with_order(layout, seed)[0]
 
 
 # The route

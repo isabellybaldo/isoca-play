@@ -74,11 +74,11 @@
 .mj-type-name { font-family: var(--px); font-size: 11px; line-height: 1.4; max-width: 100%; overflow-wrap: anywhere; }
 .mj-type-count { font-family: var(--big); font-size: 20px; line-height: 1; color: var(--dim); }
 
-/* Game: every row is sized so the tallest board still fits a 320x568 phone.
+/* Game: every row is sized so the tallest board still fits a 360x640 phone.
    The screen reaches the foot of the page, so a tap anywhere can clear a selection. */
 .mj-screen { min-height: 100dvh; }
 .shell.mj-game {
-  max-width: 464px; /* 8 tiles at 54 px, and the padding */
+  max-width: 518px; /* 9 tiles at 54 px, and the padding */
   display: grid;
   gap: 8px;
   padding-block: 12px;

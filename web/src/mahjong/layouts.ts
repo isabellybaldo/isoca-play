@@ -13,7 +13,7 @@ export type Layout = {
 // One character is one tile, so a column is 2 half-tile units and a row is 2 units.
 // Odd layers sit half a tile right of and below the even layers, so an upper tile lies
 // across the tiles under it and their rose backs show. That makes an odd layer one
-// character narrower and one row shorter. Every shape is 8 columns by 9 rows at most.
+// character narrower and one row shorter. Every shape is 9 columns by 11 rows at most.
 function fromLayers(layers: string[][]): Layout['cells'] {
   const cells: Layout['cells'] = [];
   layers.forEach((rows, z) => {
