@@ -1,7 +1,7 @@
 # isoca-play
 
-A small private site with two pixel-art games, mahjong and sudoku, for one player on a
-phone. One password in front of everything, one saved game of each kind, and each game
+A small private site with three pixel-art games, mahjong, solitaire and sudoku, for one
+player on a phone. One password in front of everything, one saved game of each kind, and each game
 resumes where it was left on any device. A game that has been loaded can be played
 offline. There are no ads, trackers or requests to third parties.
 
@@ -38,6 +38,17 @@ appears when asked for. It names a sudoku move, such as a naked single or an X-w
 it on the board and says why it works; if a written number is wrong, it points at that
 first. When the board is full the game reports won or not solved, without saying where.
 You can then return and keep trying, or start over.
+
+### Solitaire
+
+Klondike, turning one card at a time, with no limit on passes through the pile. A double tap
+sends a card up to its answer pile, and a drag moves a card or a run. Return takes back any
+move, with no limit. Tip suggests a move from what you can see, and never looks at the pile
+or the face-down cards.
+
+Every deal can be won. Each one in the pack was solved by a search, and the solution was
+then replayed through the Python copy of the rules, which must end in a win. The Python and
+TypeScript rules share their test cases, so they cannot drift apart.
 
 ## Run it locally
 

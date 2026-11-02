@@ -1,0 +1,97 @@
+/* The page stays put while the table shows: a drag must never scroll it or pull to refresh. */
+.sol-screen,
+.sol-screen body {
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+
+/* The room around the table is TABLE_CHROME: 8 + 44 bar + 6 + 44 line + 6, and 8 under it. */
+.sol-game {
+  padding-top: 8px;
+}
+
+/* One row on a 320 px phone: the labels are short, so only the padding has to give. */
+.sol-bar {
+  display: flex;
+  justify-content: space-between;
+  gap: 4px;
+  height: 44px;
+  max-width: 480px;
+  margin: 0 auto 6px;
+  padding: 0 11px 0 8px; /* 3 px more on the right for the buttons' shadow */
+}
+.sol-bar .back {
+  flex: none;
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+/* Always here, so the table never moves. Two lines of this size fit, and the longest tip needs two. */
+.sol-line {
+  height: 44px;
+  margin-bottom: 6px;
+  padding: 0 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-family: var(--big);
+  font-size: 18px;
+  line-height: 1.1;
+  color: var(--accent);
+}
+
+/* The theme's touch-action: manipulation matches every element, so opting out of panning
+   has to reach every element too. Without this a drag on a card would pan, and be cancelled. */
+.sol-table,
+.sol-table * {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.sol-table {
+  position: relative;
+  margin: 0 auto;
+}
+
+/* A card's area is the column's full width; the art sits in the middle of it. */
+.sol-card,
+.sol-slot {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+}
+
+/* The art is part of the card: a press on it is a press on the button. */
+.sol-card svg,
+.sol-slot svg {
+  pointer-events: none;
+}
+
+.sol-card {
+  min-width: 0;
+  min-height: 0;
+  cursor: grab;
+}
+.sol-card.sol-lifted { cursor: grabbing; }
+.sol-card.sol-still { cursor: default; }
+
+.sol-art {
+  display: block;
+  flex: none;
+}
+
+.sol-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 2px dashed var(--line2);
+}
+
+.sol-tip > .sol-art {
+  outline: 3px solid var(--accent);
+  outline-offset: -1px;
+}

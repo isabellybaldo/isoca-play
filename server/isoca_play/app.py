@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import Response
 from starlette.types import Scope
 
-from . import auth, db, mahjong, saves, sudoku
+from . import auth, db, mahjong, saves, solitaire, sudoku
 from .config import Settings, from_env
 
 # Hashed names never change their content. Everything else, the entry page and the
@@ -54,6 +54,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.state.settings = settings
     saves.install(app)
     mahjong.install(app)
+    solitaire.install(app)
     sudoku.install(app)
     auth.install(app)
 

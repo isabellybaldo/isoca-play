@@ -2,12 +2,13 @@ import { useCallback, useEffect, useState, type SetStateAction } from 'react';
 import { ApiError, loadSave, putSave, type GameName } from './api';
 import { LAYOUTS } from './mahjong/layouts';
 import type { MahjongState } from './mahjong/rules';
+import { isHistoryEntry, type SolitaireState } from './solitaire/rules';
 import type { SudokuState } from './sudoku/rules';
 
 // A mahjong save names its layout, and the app looks the shape up. A sudoku state
 // already holds its puzzle.
 export type MahjongSave = { layout: string; state: MahjongState };
-export type Saved = { mahjong: MahjongSave; sudoku: SudokuState };
+export type Saved = { mahjong: MahjongSave; solitaire: SolitaireState; sudoku: SudokuState };
 export type SaveStatus = 'saved' | 'retrying' | 'offline';
 
 const FIRST_WAIT = 1000;
@@ -68,8 +69,37 @@ function isPlayableSudoku(body: unknown): boolean {
   );
 }
 
+const isCards = (value: unknown): value is number[] =>
+  isNumbers(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n < 52);
+
+// All 52 cards are somewhere, once each, and undo can read the history. Unknown fields are
+// welcome. The rules own what a legal position is.
+function isPlayableSolitaire(body: unknown): boolean {
+  if (!isRecord(body) || !isCards(body.deal) || body.deal.length !== 52 || new Set(body.deal).size !== 52) return false;
+  const { stock, waste, columns, foundations, history, status } = body;
+  if (!isCards(stock) || !isCards(waste)) return false;
+  if (!Array.isArray(columns) || columns.length !== 7) return false;
+  if (!columns.every((c) => isRecord(c) && isCards(c.down) && isCards(c.up))) return false;
+  if (!isNumbers(foundations) || foundations.length !== 4) return false;
+  if (!foundations.every((n) => Number.isInteger(n) && n >= 0 && n <= 13)) return false;
+  const cards = [
+    ...stock,
+    ...waste,
+    ...(columns as { down: number[]; up: number[] }[]).flatMap((c) => [...c.down, ...c.up]),
+    ...foundations.flatMap((count, suit) => Array.from({ length: count }, (_, i) => suit * 13 + i)),
+  ];
+  return (
+    cards.length === 52 &&
+    new Set(cards).size === 52 &&
+    Array.isArray(history) &&
+    history.every(isHistoryEntry) &&
+    ['playing', 'won'].includes(status as string)
+  );
+}
+
 const PLAYABLE: Record<GameName, (body: unknown) => boolean> = {
   mahjong: isPlayableMahjong,
+  solitaire: isPlayableSolitaire,
   sudoku: isPlayableSudoku,
 };
 
@@ -82,6 +112,7 @@ const MOVED: { [G in GameName]: (a: Saved[G], b: Saved[G]) => boolean } = {
     a.state.onBoard !== b.state.onBoard ||
     a.state.slots !== b.state.slots ||
     a.state.history !== b.state.history,
+  solitaire: (a, b) => a.deal !== b.deal || a.history !== b.history,
   sudoku: (a, b) =>
     a.puzzle !== b.puzzle || a.values !== b.values || a.notes !== b.notes || a.history !== b.history,
 };
@@ -136,6 +167,10 @@ type Screen<G extends GameName> = {
 // in, so one waiting with unsent moves tries now. "saved": there is something new to
 // fetch. In that order, a tab opened to log in ends up with the moves of the tab that
 // sent it there.
+//
+// A check is a refresh that says what it heard, for a screen about to write with no tap:
+// true only if the server itself says it holds nothing and this tab has nothing either. It
+// rejects when no answer came. What the server holds is taken as in any refresh.
 function createLink<G extends GameName>(game: G, screen: Screen<G>) {
   type State = Saved[G] | null;
   type Action = SetStateAction<State>;
@@ -159,11 +194,15 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
   let channel: BroadcastChannel | undefined;
   let held: Action[] = [];
   const waiting: ((sent: boolean) => void)[] = [];
+  let asks: { resolve: (clear: boolean) => void; reject: (error: unknown) => void }[] = [];
 
   const settle = (sent: boolean) => {
     for (const done of waiting.splice(0)) done(sent);
   };
   const post = (type: 'loaded' | 'saved') => channel?.postMessage({ game, type });
+  const noAnswer = (error: unknown) => {
+    for (const ask of asks.splice(0)) ask.reject(error);
+  };
   const stopTimer = () => {
     clearTimeout(timer);
     timer = undefined;
@@ -198,6 +237,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
 
   const failed = (error: unknown) => {
     busy = false;
+    noAnswer(error);
     const status = error instanceof ApiError ? error.status : 0;
     if (PERMANENT.has(status)) {
       refused = true;
@@ -270,7 +310,14 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
       return;
     }
     again = false;
-    if (unsent || timer !== undefined) return;
+    if (unsent || timer !== undefined) {
+      noAnswer(new Error('a save is still on its way'));
+      return;
+    }
+    const answering = asks;
+    asks = [];
+    let empty = false;
+    let problem: unknown;
     busy = true;
     refreshing = !fromCache;
     const note = setTimeout(() => screen.checking(true), CHECKING_NOTE_AFTER);
@@ -278,6 +325,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     try {
       const { body, cached } = await loadSave(game);
       const text = JSON.stringify(body);
+      empty = !cached && body === null;
       if (!cached && !unsent && body !== null && text !== savedText) {
         savedText = text;
         if (playable(body)) {
@@ -298,6 +346,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
       }
     } catch (error) {
       // No answer: this tab carries on with what it has, and the next wake asks again.
+      problem = error ?? new Error('no answer');
       if (error instanceof ApiError && error.status === 401) screen.signedOut(true);
       if (fromCache) askAgainLater();
     }
@@ -308,6 +357,10 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
     const moves = held;
     held = [];
     if (!adopted) for (const action of moves) apply(action);
+    for (const ask of answering) {
+      if (problem) ask.reject(problem);
+      else ask.resolve(empty && state === null);
+    }
     finish();
   }
 
@@ -362,6 +415,7 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
       mounted = false;
       stopTimer();
       clearTimeout(checkTimer);
+      for (const ask of asks.splice(0)) ask.resolve(false);
       channel?.close();
       channel = undefined;
       window.removeEventListener('online', wake);
@@ -373,6 +427,12 @@ function createLink<G extends GameName>(game: G, screen: Screen<G>) {
       if (!ready) return;
       if (refreshing) held.push(action);
       else apply(action);
+    },
+    check() {
+      return new Promise<boolean>((resolve, reject) => {
+        asks.push({ resolve, reject });
+        void refresh();
+      });
     },
     // Resolves true when nothing is left to send, false if that does not come in time.
     flush(limit: number) {
@@ -430,6 +490,7 @@ export function useSavedGame<G extends GameName>(game: G) {
   const setState = useCallback((action: SetStateAction<Saved[G] | null>) => link.set(action), [link]);
   const flush = useCallback((limit = FLUSH_LIMIT) => link.flush(limit), [link]);
   const giveUp = useCallback(() => link.giveUp(), [link]);
+  const check = useCallback(() => link.check(), [link]);
 
-  return { state, setState, saving, signedOut, signedIn, refused, unplayable, checking, ready, flush, giveUp };
+  return { state, setState, saving, signedOut, signedIn, refused, unplayable, checking, ready, flush, giveUp, check };
 }

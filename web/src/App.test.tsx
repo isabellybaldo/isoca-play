@@ -77,11 +77,12 @@ test('mahjong goes from setup to a real deal and back, keeping the level', async
   expect(screen.getByRole('heading', { name: 'isoca play' })).toBeTruthy();
 });
 
-test('home has the two games and a log out button', async () => {
+test('home has the three games and a log out button', async () => {
   await open();
   expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
     expect.stringContaining('Mahjong'),
     expect.stringContaining('Sudoku'),
+    expect.stringContaining('Solitaire'),
     'Log out',
   ]);
 });
@@ -92,6 +93,18 @@ test('the home cards show tile art', async () => {
   expect(mahjong.querySelectorAll('svg').length).toBeGreaterThan(0);
   const sudoku = screen.getByRole('button', { name: /Sudoku/ });
   expect(sudoku.querySelectorAll('svg').length).toBeGreaterThan(0);
+  const solitaire = screen.getByRole('button', { name: /Solitaire/ });
+  expect(solitaire.querySelectorAll('svg').length).toBeGreaterThan(0);
+  expect(solitaire.textContent).toContain('Stack them down, send them home.');
+});
+
+test('the solitaire card opens the solitaire screen', async () => {
+  const user = userEvent.setup();
+  await open();
+  await user.click(screen.getByRole('button', { name: /Solitaire/ }));
+  await settle();
+  expect(screen.getByRole('button', { name: 'Pile, 24 cards' })).toBeTruthy();
+  expect(screen.queryByRole('heading', { name: 'isoca play' })).toBeNull();
 });
 
 describe('back keeps the game', () => {
@@ -705,7 +718,7 @@ describe('the server', () => {
 
     test('a boot answered only from the device does not claim a session, and keeps the flag for later', async () => {
       sessionStorage.setItem(FLAG, '1');
-      server.worker = { sudoku: null, mahjong: null };
+      server.worker = { sudoku: null, mahjong: null, solitaire: null };
       await open();
       expect(screen.queryByText(NOTE)).toBeNull();
       expect(sessionStorage.getItem(FLAG)).toBe('1');
@@ -722,11 +735,16 @@ describe('the server', () => {
         throw new Error('denied');
       });
       await open();
-      server.gate = new Promise<void>((_resolve, reject) =>
-        setTimeout(() => reject(new DOMException('Aborted', 'AbortError')), 3100),
-      );
+      // Failed only once the patience has run: on a timer from here, a slow click would
+      // make this the quick refusal, which rightly stays on the page.
+      let abort = () => {};
+      server.gate = new Promise<void>((_resolve, reject) => {
+        abort = () => reject(new DOMException('Aborted', 'AbortError'));
+      });
       await user.click(screen.getByRole('button', { name: 'Log out' }));
       await past3s();
+      abort();
+      await settle();
       await settle();
       expect(goToLogin).toHaveBeenCalledOnce();
     }, 10_000);
@@ -820,7 +838,7 @@ describe('the server', () => {
   });
 
   test('a load answered from the cache shows the marker, even if the browser says online', async () => {
-    server.worker = { sudoku: null, mahjong: null };
+    server.worker = { sudoku: null, mahjong: null, solitaire: null };
     const { container } = await open();
     expect(container.querySelector('.save-marker')!.textContent).toBe('Offline, not saved yet.');
     expect(server.requests.some((r) => r.method === 'PUT')).toBe(false);

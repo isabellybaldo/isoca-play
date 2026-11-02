@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import { blanked, fakeServer, goOffline } from './fakeServer.testutil';
 import { LAYOUTS } from './mahjong/layouts';
 import { isFree, newGame, tap, tapElsewhere } from './mahjong/rules';
+import { newSolitaire, tapPile, type SolitaireState } from './solitaire/rules';
 import { newSudoku, pressDigit, selectCell, setMode } from './sudoku/rules';
 import { useSavedGame } from './useSavedGame';
 
@@ -258,6 +259,84 @@ test('a mahjong selection sends nothing; the move does', async () => {
   change((s) => tap(s, id));
   await pass();
   expect(server.puts('mahjong')).toHaveLength(1);
+});
+
+describe('a solitaire save', () => {
+  const DEAL = Array.from({ length: 52 }, (_, i) => i);
+  const OK = newSolitaire(DEAL);
+  const PLAYED = tapPile(OK);
+  const openSolitaire = async () => {
+    const view = renderHook(() => useSavedGame('solitaire'));
+    await pass();
+    return view;
+  };
+
+  test.each<[string, unknown]>([
+    ['not an object', 'nope'],
+    ['a deal of 51 cards', { ...OK, deal: DEAL.slice(1) }],
+    ['a deal of 53 cards', { ...OK, deal: [...DEAL, 0] }],
+    ['a deal with a card twice', { ...OK, deal: [0, ...DEAL.slice(1, 51), 0] }],
+    ['a deal with no such card', { ...OK, deal: [52, ...DEAL.slice(1)] }],
+    ['a deal of words', { ...OK, deal: DEAL.map(String) }],
+    ['a card missing from the piles', { ...OK, stock: OK.stock.slice(1) }],
+    ['a card too many in the piles', { ...OK, waste: [OK.stock[0]] }],
+    ['a card too many on the answer piles', { ...OK, foundations: [1, 0, 0, 0] }],
+    ['a pile holding no such card', { ...OK, stock: [99, ...OK.stock.slice(1)] }],
+    ['a card twice across the piles', { ...OK, stock: [OK.stock[1], ...OK.stock.slice(1)] }],
+    ['a card in a column and in the pile', { ...OK, stock: [OK.columns[0].up[0], ...OK.stock.slice(1)] }],
+    // Card 0 is the ace of hearts, which one on the answer pile says is there already.
+    ['a card in the piles and on its answer pile', { ...OK, stock: OK.stock.slice(1), foundations: [1, 0, 0, 0] }],
+    ['six columns', { ...OK, columns: OK.columns.slice(1) }],
+    ['a column with no up', { ...OK, columns: [{ down: [] }, ...OK.columns.slice(1)] }],
+    ['three answer piles', { ...OK, foundations: [0, 0, 0] }],
+    ['an answer pile too high', { ...OK, stock: OK.stock.slice(14), foundations: [14, 0, 0, 0] }],
+    ['an answer pile below nothing', { ...OK, stock: [...OK.stock, 0], foundations: [-1, 0, 0, 0] }],
+    ['an unknown status', { ...OK, status: 'lost' }],
+    ['no status', { ...OK, status: undefined }],
+    ['no history', { ...OK, history: {} }],
+    ['a history entry that is no move', { ...OK, history: ['d', 'nonsense'] }],
+    ['a history entry that is no string', { ...OK, history: [7] }],
+  ])('with %s cannot be opened', async (_name, body) => {
+    const server = fakeServer({ solitaire: body });
+    const { result } = await openSolitaire();
+    expect(result.current.state).toBeNull();
+    expect(result.current.unplayable).toBe(true);
+    expect(server.puts('solitaire')).toEqual([]);
+  });
+
+  test.each<[string, unknown]>([
+    ['a new deal', OK],
+    ['moves', PLAYED],
+    ['a win', { ...OK, stock: [], columns: OK.columns.map(() => ({ down: [], up: [] })), foundations: [13, 13, 13, 13], history: ['c0>f0:1'], status: 'won' }],
+    ['unknown extra fields', { ...PLAYED, later: { any: 'thing' } }],
+    [
+      'cards on the answer piles',
+      {
+        ...OK,
+        stock: [],
+        waste: [],
+        columns: [{ down: [], up: Array.from({ length: 50 }, (_, i) => i + 2) }, ...OK.columns.slice(1).map(() => ({ down: [], up: [] }))],
+        foundations: [2, 0, 0, 0],
+      },
+    ],
+  ])('with %s opens', async (_name, body) => {
+    fakeServer({ solitaire: body });
+    const { result } = await openSolitaire();
+    expect(result.current.unplayable).toBe(false);
+    expect(result.current.state).toEqual(body);
+  });
+
+  test.each<[string, (s: SolitaireState) => SolitaireState, number]>([
+    ['a change of deal', (s) => ({ ...s, deal: [...s.deal] }), 1],
+    ['a change of history', (s) => ({ ...s, history: [...s.history] }), 1],
+    ['anything else', (s) => ({ ...s, stock: [...s.stock] }), 0],
+  ])('%s decides whether it is a move', async (_name, change, puts) => {
+    const server = fakeServer({ solitaire: OK });
+    const { result } = await openSolitaire();
+    act(() => result.current.setState((s) => change(s!)));
+    await pass();
+    expect(server.puts('solitaire')).toHaveLength(puts);
+  });
 });
 
 const wake = {
@@ -632,5 +711,79 @@ describe('offline, with the worker answering', () => {
     expect(server.requests.length).toBe(before + 1);
     first.unmount();
     second.unmount();
+  });
+});
+
+describe('check', () => {
+  const solitaire = async () => {
+    const view = renderHook(() => useSavedGame('solitaire'));
+    await pass();
+    return view;
+  };
+  const answer = async (check: () => Promise<boolean>) => {
+    const outcome = check().catch((error: unknown) => error);
+    await pass();
+    return outcome;
+  };
+  const SAVE = newSolitaire(Array.from({ length: 52 }, (_, i) => i));
+
+  test('true only when the server itself says it holds nothing', async () => {
+    fakeServer();
+    const { result } = await solitaire();
+    expect(await answer(result.current.check)).toBe(true);
+  });
+
+  test('a game that has appeared is taken, and the answer is false', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    server.saves.solitaire = SAVE;
+    expect(await answer(result.current.check)).toBe(false);
+    expect(result.current.state).toEqual(SAVE);
+  });
+
+  test('a cached answer is false', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    server.worker = { solitaire: null };
+    expect(await answer(result.current.check)).toBe(false);
+  });
+
+  test('no answer rejects', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    server.answer = () => 503;
+    expect(await answer(result.current.check)).toBeInstanceOf(Error);
+  });
+
+  test('a check made during another request waits for an answer of its own', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    let release = () => {};
+    server.gate = new Promise<void>((resolve) => (release = resolve));
+    const first = result.current.check();
+    await pass();
+    const second = result.current.check();
+    await pass();
+    server.gate = null;
+    server.saves.solitaire = SAVE; // the second ask, not the first, is the one that can see this
+    release();
+    await pass();
+    await first;
+    expect(await second).toBe(false);
+    expect(result.current.state).toEqual(SAVE);
+  });
+
+  test('leaving ends a check that is still waiting', async () => {
+    const server = fakeServer();
+    const { result, unmount } = await solitaire();
+    let release = () => {};
+    server.gate = new Promise<void>((resolve) => (release = resolve));
+    void result.current.check();
+    await pass();
+    const late = result.current.check();
+    unmount();
+    expect(await late).toBe(false);
+    release();
+    await pass();
   });
 });

@@ -17,7 +17,7 @@ from starlette.concurrency import run_in_threadpool
 from . import db
 from .config import Settings
 
-GAMES = frozenset({"mahjong", "sudoku"})
+GAMES = frozenset({"mahjong", "solitaire", "sudoku"})
 MAX_BODY = 512 * 1024
 NO_STORE = {"Cache-Control": "no-store"}
 

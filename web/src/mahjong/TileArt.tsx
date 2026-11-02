@@ -817,10 +817,10 @@ const ROSE = { top: '#aa4465', light: '#c8859b' };
 const EDGE = '#aa4465';
 const EDGE_SHADOW = '#7a3049';
 
-type Paint = { x: number; y: number; width: number; height: number; fill: string };
+export type Paint = { x: number; y: number; width: number; height: number; fill: string };
 
 // One rect per run of a colour, so a full board stays light on the page.
-function runs(rows: string[], left: number, top: number, colourOf: (ch: string) => string): Paint[] {
+export function runs(rows: string[], left: number, top: number, colourOf: (ch: string) => string): Paint[] {
   return rows.flatMap((row, y) =>
     [...row.matchAll(/([^.])\1*/g)].map((run) => ({
       x: run.index + left,
@@ -844,7 +844,7 @@ function body(face: { top: string; light: string }): Paint[] {
   ];
 }
 
-function Pixels({ paint, width, height, label }: { paint: Paint[]; width: number; height: number; label: string }) {
+export function Pixels({ paint, width, height, label }: { paint: Paint[]; width: number; height: number; label: string }) {
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}

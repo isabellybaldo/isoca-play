@@ -1,4 +1,5 @@
 import type { Screen } from './App';
+import { CardBack, CardFace } from './solitaire/CardArt';
 import { FaceArt, TileArt, TileBack } from './mahjong/TileArt';
 
 function MahjongArt() {
@@ -26,6 +27,17 @@ function SudokuArt() {
         <span>2</span>
         <span className="quiet">4</span>
       </span>
+    </span>
+  );
+}
+
+function SolitaireArt() {
+  return (
+    <span className="game-art" aria-hidden="true">
+      <span className="card-heap heap"><CardFace card={11} /></span>
+      <span className="card-heap heap"><CardFace card={51} /></span>
+      <span className="card-heap heap"><CardBack /></span>
+      <span className="card-heap heap"><CardFace card={0} /></span>
     </span>
   );
 }
@@ -58,6 +70,11 @@ export default function Home({
           <SudokuArt />
           <span className="game-name">Sudoku</span>
           <span className="game-line">Fill the grid, one to nine.</span>
+        </button>
+        <button type="button" className="game solitaire" disabled={leaving} onClick={() => onOpen('solitaire')}>
+          <SolitaireArt />
+          <span className="game-name">Solitaire</span>
+          <span className="game-line">Stack them down, send them home.</span>
         </button>
       </div>
       <div className="home-foot">
