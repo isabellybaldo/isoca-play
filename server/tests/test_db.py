@@ -45,7 +45,7 @@ def test_a_new_migration_is_applied_on_top_of_an_old_database(tmp_path, monkeypa
     db.connect(path).close()
     monkeypatch.setattr(db, "MIGRATIONS", db.MIGRATIONS + ["ALTER TABLE save ADD COLUMN note TEXT;"])
     conn = db.connect(path)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == len(db.MIGRATIONS)
     assert "note" in [r[1] for r in conn.execute("PRAGMA table_info(save)")]
     conn.close()
 

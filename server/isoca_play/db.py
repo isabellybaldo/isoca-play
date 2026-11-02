@@ -32,6 +32,24 @@ MIGRATIONS: list[str] = [
         updated_at REAL NOT NULL
     );
     """,
+    """
+    CREATE TABLE IF NOT EXISTS game_record (
+        id       TEXT PRIMARY KEY,
+        game     TEXT NOT NULL,
+        level    TEXT,
+        result   TEXT NOT NULL,
+        day      TEXT NOT NULL,
+        days     TEXT NOT NULL,
+        seconds  INTEGER NOT NULL,
+        returns  INTEGER NOT NULL,
+        tips     INTEGER NOT NULL,
+        map      TEXT,
+        slots    INTEGER,
+        moves    INTEGER,
+        unsolved INTEGER,
+        turns    INTEGER
+    );
+    """,
 ]
 
 
