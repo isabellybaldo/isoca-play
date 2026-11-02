@@ -37,11 +37,16 @@ function isTile(value: unknown): boolean {
 }
 
 function isPlayableMahjong(body: unknown): boolean {
-  if (!isRecord(body) || !LAYOUTS.some((l) => l.id === body.layout)) return false;
+  const layout = isRecord(body) ? LAYOUTS.find((l) => l.id === body.layout) : undefined;
+  if (!isRecord(body) || !layout) return false;
   const state = body.state;
   if (!isRecord(state) || !Array.isArray(state.tiles) || !state.tiles.every(isTile)) return false;
   if (!isNumbers(state.onBoard) || !isNumbers(state.slots) || !Array.isArray(state.history)) return false;
-  const ids = new Set((state.tiles as { id: number }[]).map((t) => t.id));
+  // A game dealt on an older drawing of this map has its tiles in the wrong places.
+  const tiles = state.tiles as { id: number; x: number; y: number; z: number }[];
+  const spots = new Set(layout.cells.map((c) => `${c.x},${c.y},${c.z}`));
+  if (tiles.length !== layout.cells.length || !tiles.every((t) => spots.has(`${t.x},${t.y},${t.z}`))) return false;
+  const ids = new Set(tiles.map((t) => t.id));
   return (
     [...state.onBoard, ...state.slots].every((id) => ids.has(id)) &&
     isCell(state.selected) &&

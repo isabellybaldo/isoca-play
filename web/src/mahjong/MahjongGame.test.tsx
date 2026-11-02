@@ -197,7 +197,7 @@ describe('the tile on the board', () => {
 
   test.each([
     [320, 568, 36, 46, 18, 20],
-    [1366, 768, 54, 69, 27, 30],
+    [1920, 1080, 54, 69, 27, 30],
   ])('at %i x %i a tile is whole-number scaled and half a unit is half a pitch', (w, h, tw, th, hx, hy) => {
     vi.stubGlobal('innerWidth', w);
     vi.stubGlobal('innerHeight', h);
@@ -240,9 +240,9 @@ describe('the look in the stylesheet', () => {
     expect(theme).not.toMatch(/\.tile\s*\{[^}]*box-shadow/);
   });
 
-  test('a slot holds one 36 x 46 tile, and the game is wide enough for 8 tiles at 54 px', () => {
+  test('a slot holds one 36 x 46 tile, and the game is wide enough for 9 tiles at 54 px', () => {
     expect(css).toMatch(/\.mj-slot\s*\{[^}]*width:\s*44px;[^}]*height:\s*54px/);
-    expect(css).toMatch(/\.shell\.mj-game\s*\{[^}]*max-width:\s*464px/);
+    expect(css).toMatch(/\.shell\.mj-game\s*\{[^}]*max-width:\s*518px/);
   });
 
   test('the home heap uses a whole-number scale', () => {

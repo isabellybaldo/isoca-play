@@ -4,17 +4,18 @@ import { FACES, LAYOUTS, layoutsFor, type Level } from './layouts';
 const overlaps = (a: { x: number; y: number }, b: { x: number; y: number }) =>
   Math.abs(a.x - b.x) < 2 && Math.abs(a.y - b.y) < 2;
 
-test.each(LAYOUTS)('$id fits a phone at 8 tiles wide and 9 rows tall, with an even tile count', (l) => {
+test.each(LAYOUTS)('$id fits a phone at 9 tiles wide and 11 rows tall, with an even tile count', (l) => {
   expect(l.cells.length % 2).toBe(0);
   const xs = l.cells.map((c) => c.x);
   const ys = l.cells.map((c) => c.y);
-  expect(Math.max(...xs) - Math.min(...xs) + 2).toBeLessThanOrEqual(16); // 8 tiles wide
-  expect(Math.max(...ys) - Math.min(...ys) + 2).toBeLessThanOrEqual(18); // 9 rows tall
+  expect(Math.max(...xs) - Math.min(...xs) + 2).toBeLessThanOrEqual(18); // 9 tiles wide
+  expect(Math.max(...ys) - Math.min(...ys) + 2).toBeLessThanOrEqual(22); // 11 rows tall
   expect(new Set(l.cells.map((c) => `${c.x},${c.y},${c.z}`)).size).toBe(l.cells.length);
 });
 
-test.each(LAYOUTS)('$id has at most one pair per match kind', (l) => {
-  expect(l.cells.length / 2).toBeLessThanOrEqual(36);
+// Past 72 tiles kinds repeat, so which of four matching tiles to take starts to matter.
+test.each(LAYOUTS)('$id has the tile count of its level', (l) => {
+  expect(l.cells.length).toBe({ easy: 72, medium: 100, hard: 144 }[l.level]);
 });
 
 test.each(LAYOUTS)('$id: tiles on one layer do not overlap', (l) => {

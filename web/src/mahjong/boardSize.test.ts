@@ -17,11 +17,10 @@ test('the two sizes are the 18 x 23 sprite at 2x and 3x', () => {
 
 describe.each(LAYOUTS)('$id on the board', (l: Layout) => {
   test.each([
-    [320, 568],
     [360, 640],
     [390, 844],
     [440, 900],
-    [1366, 768],
+    [1366, 900],
   ])('at %i x %i the whole board fits, across and down', (vw, vh) => {
     const width = tileWidth(l, vw, vh);
     expect([36, 54]).toContain(width);
@@ -30,10 +29,10 @@ describe.each(LAYOUTS)('$id on the board', (l: Layout) => {
     expect(box.height + GAME_CHROME).toBeLessThanOrEqual(vh);
   });
 
-  test('is 36 px at 320 x 568 and on a 390 px phone, and 54 px on a laptop', () => {
-    expect(tileWidth(l, 320, 568)).toBe(36);
+  test('is 36 px on a 360 or 390 px phone, and 54 px on a big screen', () => {
+    expect(tileWidth(l, 360, 640)).toBe(36);
     expect(tileWidth(l, 390, 844)).toBe(36);
-    expect(tileWidth(l, 1366, 768)).toBe(54);
+    expect(tileWidth(l, 1920, 1080)).toBe(54);
   });
 
   test.each([36, 54])('every tile stays inside the board box at %i px', (width) => {

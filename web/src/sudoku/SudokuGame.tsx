@@ -3,7 +3,7 @@ import { newGameProblem, newSudoku as askForPuzzle, REPLACE_UNPLAYABLE, startNot
 import ConfirmDialog from '../ConfirmDialog';
 import type { Level } from '../mahjong/layouts';
 import ResumeButton from '../ResumeButton';
-import { hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, wrongCells, type SudokuState } from './rules';
+import { glowOf, hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, wrongCells, type SudokuState } from './rules';
 import { tipChain, type TipStep } from './tips';
 import './sudoku.css';
 
@@ -68,6 +68,8 @@ function Cell({
   if (given) classes.push('is-given');
   else if (value !== 0) classes.push('is-written');
   if (selected) classes.push('is-selected');
+  const glow = glowOf(state, cell);
+  if (glow) classes.push(`is-${glow}`);
   if (mark.lit) classes.push('is-tip');
   if (mark.wrong) classes.push('is-wrong');
   if (mark.placed !== null) classes.push('is-placed');

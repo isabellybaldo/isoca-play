@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest';
-import { newSudoku, pressDigit, selectCell, setMode, undo, wrongCells } from './rules';
+import { glowOf, newSudoku, pressDigit, selectCell, setMode, undo, wrongCells } from './rules';
 import type { SudokuState } from './rules';
 import { blanked } from '../fakeServer.testutil';
 
@@ -34,6 +34,53 @@ describe('sudoku rules', () => {
     expect(s.notes[c]).toBe(0);
     expect(s.values[c]).toBe(7);
     expect(s.history).toHaveLength(before.history.length);
+  });
+
+  describe('writing a number and the notes it rules out', () => {
+    const FOUR = 1 << 3;
+    const SIX = 1 << 5;
+    // Cell 40 is the centre: 36 shares its row, 4 its column, 30 its box, and 0 none of them.
+    const noted = (cells: number[], mask: number): SudokuState => ({
+      ...selectCell(newSudoku(P), 40),
+      notes: new Array<number>(81).fill(0).map((_, i) => (cells.includes(i) ? mask : 0)),
+    });
+
+    test('takes that digit out of its row, column and box, and leaves the rest', () => {
+      const s = pressDigit(noted([36, 4, 30, 0], FOUR | SIX), 4);
+      for (const c of [36, 4, 30]) expect(s.notes[c]).toBe(SIX);
+      expect(s.notes[0]).toBe(FOUR | SIX);
+    });
+
+    test('Return brings the notes back, and one Return is one move', () => {
+      const before = noted([36, 4, 30, 0], FOUR | SIX);
+      const s = undo(pressDigit(before, 4));
+      expect(s.notes).toEqual(before.notes);
+      expect(s.history).toHaveLength(0);
+    });
+
+    test('Return does not add a note the number never took', () => {
+      const s = undo(pressDigit(noted([36], SIX), 4));
+      expect(s.notes[36]).toBe(SIX);
+    });
+
+    test('overwriting a number takes out the new digit, and Return returns only that', () => {
+      const before = pressDigit(noted([36], FOUR | SIX), 4);
+      const s = pressDigit(before, 6);
+      expect(s.notes[36]).toBe(0);
+      expect(undo(s).notes[36]).toBe(SIX);
+    });
+
+    test('erasing a number or making a note leaves other squares alone', () => {
+      const written = pressDigit(noted([36], SIX), 4);
+      expect(pressDigit(written, 4).notes[36]).toBe(SIX);
+      expect(pressDigit(setMode(noted([36], FOUR), 'notes'), 4).notes[36]).toBe(FOUR);
+    });
+
+    test('Return still works on a move saved before notes were erased', () => {
+      const s = pressDigit(noted([], 0), 4);
+      const old = { ...s, history: [{ cell: 40, value: 0, notes: 0 }] };
+      expect(undo(old).values[40]).toBe(0);
+    });
   });
 
   test('givens cannot change in either mode', () => {
@@ -125,6 +172,37 @@ describe('sudoku rules', () => {
       'status',
       'values',
     ]);
+  });
+});
+
+describe('glowOf', () => {
+  const lit = (s: SudokuState, glow: 'same' | 'peer') => s.values.flatMap((_, c) => (glowOf(s, c) === glow ? [c] : []));
+
+  test('nothing glows with nothing selected', () => {
+    const s = newSudoku(P);
+    expect(lit(s, 'same')).toEqual([]);
+    expect(lit(s, 'peer')).toEqual([]);
+  });
+
+  test('a filled square lights the other squares holding its number, given or written', () => {
+    const digit = sol(givenCell);
+    let s = newSudoku(P);
+    const blank = emptyCells.find((c) => sol(c) !== digit)!;
+    s = selectCell(pressDigit(selectCell(s, blank), digit), givenCell);
+    const others = s.values.flatMap((v, c) => (v === digit && c !== givenCell ? [c] : []));
+    expect(others).toContain(blank);
+    expect(lit(s, 'same')).toEqual(others);
+    expect(lit(s, 'peer')).toEqual([]);
+  });
+
+  test('an empty square lights its row, column and box, but not itself', () => {
+    const s = selectCell(newSudoku(P), 40);
+    const peers = lit(s, 'peer');
+    expect(peers).toHaveLength(20);
+    expect(peers).not.toContain(40);
+    for (const c of [36, 44, 4, 76, 30, 50]) expect(peers).toContain(c);
+    for (const c of [0, 27, 53, 80]) expect(peers).not.toContain(c);
+    expect(lit(s, 'same')).toEqual([]);
   });
 });
 

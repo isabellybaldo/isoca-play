@@ -42,7 +42,7 @@ export function boardBox(layout: Layout, width: number): { width: number; height
 }
 
 // 54 px only when the whole board and the rows around it fit the viewport. Otherwise
-// 36 px, the smallest size: a board at most 8 tiles wide and 9 rows tall fits 320 x 568.
+// 36 px, the smallest size: a board at most 9 tiles wide and 11 rows tall fits 360 x 640.
 export function tileWidth(
   layout: Layout,
   viewportWidth: number,

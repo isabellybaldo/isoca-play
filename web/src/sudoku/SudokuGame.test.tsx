@@ -111,6 +111,22 @@ describe('level choice', () => {
   });
 });
 
+describe('what the selected square lights up', () => {
+  const withClass = (name: string) => cells().flatMap((c, i) => (c.classList.contains(name) ? [i] : []));
+
+  test('an empty square lights its row, column and box; a filled one its number', async () => {
+    const { user } = await start();
+    await user.click(cells()[0]); // empty on this board
+    expect(withClass('is-peer')).toHaveLength(20);
+    expect(withClass('is-same')).toEqual([]);
+
+    await user.click(cells()[3]); // a given
+    expect(withClass('is-peer')).toEqual([]);
+    const same = SOLUTION.flatMap((v, c) => (v === SOLUTION[3] && c !== 3 && !FIRST_BLANKS.includes(c) ? [c] : []));
+    expect(withClass('is-same')).toEqual(same);
+  });
+});
+
 describe('writing and notes', () => {
   test('notes mode shows small numbers; write mode replaces them with one big one', async () => {
     const { user } = await start();
@@ -172,16 +188,16 @@ describe('no marks', () => {
     expect(right.innerHTML.replace(/\d/, 'N')).toBe(wrong.innerHTML.replace(/\d/, 'N'));
   });
 
-  test('givens and written numbers differ, and only the selected square is lit', async () => {
+  test('givens and written numbers differ, and only one square is selected', async () => {
     const { user } = await start();
     await writeIn(user, 0, 5);
     expect(cells()[0].className).toBe('cell is-written is-selected');
-    expect(cells()[10].className).toBe('cell is-given');
+    expect(cells()[10].classList.contains('is-given')).toBe(true);
     expect(cells().filter((c) => c.classList.contains('is-selected'))).toEqual([cells()[0]]);
     expect(cells().filter((c) => c.getAttribute('aria-pressed') === 'true')).toEqual([cells()[0]]);
-    // every other square is just empty, given or written: no row, column or same-number light
+    // every other square is empty, given or written, and at most holds the same number
     const kinds = new Set(cells().slice(1).map((c) => c.className));
-    for (const k of kinds) expect(['cell', 'cell is-given', 'cell is-written']).toContain(k);
+    for (const k of kinds) expect(['cell', 'cell is-given', 'cell is-written', 'cell is-given is-same', 'cell is-written is-same']).toContain(k);
   });
 });
 
@@ -192,7 +208,7 @@ describe('the end', () => {
     expect(note()).toBe('Not solved.');
     await user.click(cells()[40]);
     for (const c of FIRST_BLANKS) expect(cells()[c].className).toBe('cell is-written');
-    for (const c of cells()) expect(['cell', 'cell is-given', 'cell is-written', 'cell is-given is-selected']).toContain(c.className);
+    for (const c of cells()) expect(['cell', 'cell is-given', 'cell is-written', 'cell is-given is-selected', 'cell is-given is-same', 'cell is-written is-same']).toContain(c.className);
     expect(screen.queryByRole('alertdialog')).toBeNull();
   });
 

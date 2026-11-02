@@ -58,5 +58,7 @@ export default defineConfig({
   },
   test: {
     environment: 'jsdom',
+    // A 100-tile board is slow to click through in jsdom when the whole suite is running.
+    testTimeout: 20000,
   },
 });

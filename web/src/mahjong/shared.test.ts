@@ -2,7 +2,7 @@ import { expect, test } from 'vitest';
 import rawCases from '../../../shared/rule-cases.json';
 import rawSamples from '../../../shared/deal-samples.json';
 import { FACES, LAYOUTS } from './layouts';
-import { freePairs, isCovered, isFree, matchKey, newGame, tap, type MahjongState, type Tile } from './rules';
+import { isCovered, isFree, matchKey, newGame, tap, type MahjongState, type Tile } from './rules';
 
 type RuleCase = {
   name: string;
@@ -12,59 +12,39 @@ type RuleCase = {
   free: number[];
   matchKeys: Record<string, string>;
 };
-type Sample = { layout: string; seed: number; tiles: Tile[] };
+type Sample = { layout: string; seed: number; tiles: Tile[]; order: number[][] };
 
 const ruleCases = rawCases as RuleCase[];
 const samples = rawSamples as Sample[];
 
-// Depth-first search over the slot rule, played through the real tap, trying moves
-// that make a pair first.
-function canWin(tiles: Tile[]): boolean {
-  const seen = new Set<string>();
-  const kindOf = (id: number) => matchKey(tiles[id].face);
-  const search = (s: MahjongState): boolean => {
-    if (s.status === 'won') return true;
-    if (s.status === 'lost') return false;
-    const key = `${s.onBoard.join(',')}|${s.slots.join(',')}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    const held = new Set(s.slots.map(kindOf));
-    const free = s.onBoard.filter((id) => isFree(s, id));
-    const pairs = free.filter((id) => held.has(kindOf(id)));
-    const rest = free.filter((id) => !held.has(kindOf(id)));
-    return [...pairs, ...rest].some((id) => search(tap(tap(s, id), id)));
-  };
-  return search(newGame(tiles));
+// The server's clearing order, played through the real tap. Searching for a win is no test:
+// once kinds repeat, wrong turns can take longer to rule out than any run should.
+function winsWithSlots(tiles: Tile[], order: number[][]): boolean {
+  const end = order.flat().reduce((s, id) => tap(tap(s, id), id), newGame(tiles));
+  return end.status === 'won';
+}
+
+function winsWithoutSlots(tiles: Tile[], order: number[][]): boolean {
+  const end = order.reduce((s, [a, b]) => tap(tap(s, a), b), newGame(tiles, { noSlots: true }));
+  return end.status === 'won';
 }
 
 test.each(samples)('$layout sample $seed plays to a win through tap', (s) => {
-  expect(canWin(s.tiles)).toBe(true);
+  expect(winsWithSlots(s.tiles, s.order)).toBe(true);
 });
-
-// Depth-first search over the no-slots rule, played through the real tap.
-function canWinNoSlots(tiles: Tile[]): boolean {
-  const seen = new Set<string>();
-  const search = (s: MahjongState): boolean => {
-    if (s.status === 'won') return true;
-    if (s.status === 'lost') return false;
-    const key = s.onBoard.join(',');
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return freePairs(s).some(([a, b]) => search(tap(tap(s, a), b)));
-  };
-  return search(newGame(tiles, { noSlots: true }));
-}
 
 test.each(samples)('$layout sample $seed plays to a win without slots', (s) => {
-  expect(canWinNoSlots(s.tiles)).toBe(true);
+  expect(winsWithoutSlots(s.tiles, s.order)).toBe(true);
 });
 
-test('canWin rejects a deal that cannot be won', () => {
-  // One tower of ten tiles: the top comes off first, e d c b fill the four slots.
-  const tiles: Tile[] = ['a', 'b', 'c', 'd', 'e', 'a', 'b', 'c', 'd', 'e'].map((face, i) => ({
-    id: i, x: 0, y: 0, z: i, face,
-  }));
-  expect(canWin(tiles)).toBe(false);
+test('an order that does not clear the board is no win', () => {
+  const s = samples[0];
+  const short = s.order.slice(0, -1);
+  const swapped = [...s.order].reverse();
+  expect(winsWithSlots(s.tiles, short)).toBe(false);
+  expect(winsWithoutSlots(s.tiles, short)).toBe(false);
+  expect(winsWithSlots(s.tiles, swapped)).toBe(false);
+  expect(winsWithoutSlots(s.tiles, swapped)).toBe(false);
 });
 
 test('there are 20 samples of each layout', () => {

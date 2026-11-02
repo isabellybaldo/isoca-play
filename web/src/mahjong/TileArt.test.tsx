@@ -122,6 +122,19 @@ describe('TileArt', () => {
     expect(TILE_ART.winter[12]).toBe('.GGGGGGGGGGGGGG.');
   });
 
+  test.each(['bamboo3', 'bamboo5', 'bamboo6', 'bamboo7', 'bamboo8', 'bamboo9'])(
+    '%s keeps a blank row between each of its three tiers',
+    (face: string) => {
+      const blank = TILE_ART[face].flatMap((row, y) => (row === '.'.repeat(16) ? [y] : []));
+      expect(blank).toEqual([5, 10]);
+    },
+  );
+
+  test.each(['bamboo3', 'bamboo5', 'bamboo7', 'bamboo9'])('%s has an all-orange middle stick', (face: string) => {
+    const stick = TILE_ART[face].slice(6, 10).map((row) => row.slice(7, 9));
+    expect(stick).toEqual(['OO', 'oo', 'oo', 'OO']);
+  });
+
   test('a face names itself for screen readers', () => {
     const { container } = render(<TileArt face="cat" />);
     expect(container.querySelector('svg')!.getAttribute('aria-label')).toBe('Cat');

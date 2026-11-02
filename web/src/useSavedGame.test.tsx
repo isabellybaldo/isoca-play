@@ -199,6 +199,8 @@ const FRAME = LAYOUTS[0];
 const DEALT = newGame(FRAME.cells.map((c, id) => ({ id, ...c, face: 'cat' })));
 test.each([
   ['an unknown layout', { layout: 'nope', state: DEALT }],
+  ['an older drawing of the layout, tiles elsewhere', { layout: FRAME.id, state: { ...DEALT, tiles: DEALT.tiles.map((t) => ({ ...t, x: t.x + 100 })) } }],
+  ['an older drawing of the layout, fewer tiles', { layout: FRAME.id, state: { ...DEALT, tiles: DEALT.tiles.slice(0, 2), onBoard: [0, 1] } }],
   ['tiles that are not tiles', { layout: FRAME.id, state: { ...DEALT, tiles: [1, 2] } }],
   ['a tile with no face', { layout: FRAME.id, state: { ...DEALT, tiles: [{ id: 0, x: 0, y: 0, z: 0 }] } }],
   ['no board', { layout: FRAME.id, state: { ...DEALT, onBoard: null } }],

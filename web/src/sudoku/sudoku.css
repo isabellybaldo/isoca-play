@@ -62,6 +62,9 @@
 .cell.is-given { background: var(--bar); color: var(--fg); }
 .cell.is-written { color: var(--line); }
 .cell.is-selected { background: #ffd166; color: var(--page); }
+/* What the selected square lights: its number on a dim gold, or its row, column and box */
+.cell.is-same { background: #8a6d2f; color: #fff; }
+.cell.is-peer { background: #3f2b55; }
 .cell .value { font-family: var(--big); font-size: 30px; line-height: 1; }
 .cell.is-given .value { font-weight: 700; text-shadow: 0.5px 0 0 currentColor; }
 
