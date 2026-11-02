@@ -735,11 +735,16 @@ describe('the server', () => {
         throw new Error('denied');
       });
       await open();
-      server.gate = new Promise<void>((_resolve, reject) =>
-        setTimeout(() => reject(new DOMException('Aborted', 'AbortError')), 3100),
-      );
+      // Failed only once the patience has run: on a timer from here, a slow click would
+      // make this the quick refusal, which rightly stays on the page.
+      let abort = () => {};
+      server.gate = new Promise<void>((_resolve, reject) => {
+        abort = () => reject(new DOMException('Aborted', 'AbortError'));
+      });
       await user.click(screen.getByRole('button', { name: 'Log out' }));
       await past3s();
+      abort();
+      await settle();
       await settle();
       expect(goToLogin).toHaveBeenCalledOnce();
     }, 10_000);
