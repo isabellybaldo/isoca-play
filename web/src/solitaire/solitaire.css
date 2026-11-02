@@ -1,0 +1,60 @@
+/* The page stays put while the table shows: a drag must never scroll it or pull to refresh. */
+.sol-screen,
+.sol-screen body {
+  overscroll-behavior: none;
+  overflow: hidden;
+}
+
+/* The theme's touch-action: manipulation matches every element, so opting out of panning
+   has to reach every element too. Without this a drag on a card would pan, and be cancelled. */
+.sol-table,
+.sol-table * {
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.sol-table {
+  position: relative;
+  margin: 0 auto;
+}
+
+/* A card's area is the column's full width; the art sits in the middle of it. */
+.sol-card,
+.sol-slot {
+  position: absolute;
+  display: flex;
+  justify-content: center;
+}
+
+/* The art is part of the card: a press on it is a press on the button. */
+.sol-card svg,
+.sol-slot svg {
+  pointer-events: none;
+}
+
+.sol-card {
+  min-width: 0;
+  min-height: 0;
+  cursor: grab;
+}
+.sol-card.sol-lifted { cursor: grabbing; }
+.sol-card.sol-still { cursor: default; }
+
+.sol-art {
+  display: block;
+  flex: none;
+}
+
+.sol-empty {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 2px dashed var(--line2);
+}
+
+.sol-tip > .sol-art {
+  outline: 3px solid var(--accent);
+  outline-offset: -1px;
+}
