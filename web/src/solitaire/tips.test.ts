@@ -1,7 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, test } from 'vitest';
-import pack from '../../../server/isoca_play/data/solitaire_pack.json';
 import { newSolitaire, tapPile, move, type SolitaireState, type Column } from './rules';
 import { tipFor } from './tips';
+
+// Read when the test runs, not imported: tsc checks the tests too, and the image's web stage
+// has only web/ and shared/. CI runs the tests from the checkout, where this file is.
+const PACK_FILE = join(import.meta.dirname, '..', '..', '..', 'server', 'isoca_play', 'data', 'solitaire_pack.json');
+const pack = JSON.parse(readFileSync(PACK_FILE, 'utf8'));
 
 const h = (r: number) => r - 1;
 const d = (r: number) => 13 + r - 1;
