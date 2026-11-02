@@ -1,6 +1,6 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { afterEach, expect, test, vi } from 'vitest';
+import { afterEach, describe, expect, test, vi } from 'vitest';
 import { goToLogin } from './api';
 import App from './App';
 import { DEALS, fakeServer } from './fakeServer.testutil';
@@ -80,6 +80,57 @@ test('a saved game opens as it was, and sends nothing', async () => {
   await settle();
   expect(button('Pile, 23 cards')).toBeTruthy();
   expect(server.puts('solitaire')).toEqual([]);
+});
+
+describe('a load answered from the device says nothing about the server', () => {
+  const past1s = () =>
+    act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    });
+  const nothingSent = (server: ReturnType<typeof fakeServer>) => {
+    expect(server.requests.some((r) => r.path === '/api/new/solitaire')).toBe(false);
+    expect(server.puts('solitaire')).toEqual([]);
+  };
+  async function openOnCachedNothing(server: ReturnType<typeof fakeServer>) {
+    server.worker = { mahjong: null, solitaire: null, sudoku: null };
+    await open();
+    await userEvent.setup().click(button('Solitaire'));
+    await settle();
+    // navigator.onLine says online throughout, and the deal route works.
+    nothingSent(server);
+    expect(screen.getByText('New games need a connection.')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'New game' })).toBeNull();
+  }
+
+  test('a game on the server is adopted once it answers, with nothing sent', async () => {
+    const server = fakeServer();
+    await openOnCachedNothing(server);
+    server.saves.solitaire = tapPile(newSolitaire(DEALS[0]));
+    server.worker = null;
+    await past1s();
+    expect(button('Pile, 23 cards')).toBeTruthy();
+    nothingSent(server);
+  });
+
+  test('an unreadable save on the server is not replaced without its tap', async () => {
+    const server = fakeServer();
+    await openOnCachedNothing(server);
+    server.saves.solitaire = { nonsense: true };
+    server.worker = null;
+    await past1s();
+    expect(screen.getByText('The saved game could not be opened.')).toBeTruthy();
+    nothingSent(server);
+    expect(server.saves.solitaire).toEqual({ nonsense: true });
+  });
+
+  test('a server that truly has nothing gets its deal', async () => {
+    const server = fakeServer();
+    await openOnCachedNothing(server);
+    server.worker = null;
+    await past1s();
+    expect(button('Pile, 24 cards')).toBeTruthy();
+    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+  });
 });
 
 test('log out waits for a solitaire move on its way', async () => {

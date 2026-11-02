@@ -282,6 +282,10 @@ describe('a solitaire save', () => {
     ['a card too many in the piles', { ...OK, waste: [OK.stock[0]] }],
     ['a card too many on the answer piles', { ...OK, foundations: [1, 0, 0, 0] }],
     ['a pile holding no such card', { ...OK, stock: [99, ...OK.stock.slice(1)] }],
+    ['a card twice across the piles', { ...OK, stock: [OK.stock[1], ...OK.stock.slice(1)] }],
+    ['a card in a column and in the pile', { ...OK, stock: [OK.columns[0].up[0], ...OK.stock.slice(1)] }],
+    // Card 0 is the ace of hearts, which one on the answer pile says is there already.
+    ['a card in the piles and on its answer pile', { ...OK, stock: OK.stock.slice(1), foundations: [1, 0, 0, 0] }],
     ['six columns', { ...OK, columns: OK.columns.slice(1) }],
     ['a column with no up', { ...OK, columns: [{ down: [] }, ...OK.columns.slice(1)] }],
     ['three answer piles', { ...OK, foundations: [0, 0, 0] }],
@@ -305,6 +309,16 @@ describe('a solitaire save', () => {
     ['moves', PLAYED],
     ['a win', { ...OK, stock: [], columns: OK.columns.map(() => ({ down: [], up: [] })), foundations: [13, 13, 13, 13], history: ['c0>f0:1'], status: 'won' }],
     ['unknown extra fields', { ...PLAYED, later: { any: 'thing' } }],
+    [
+      'cards on the answer piles',
+      {
+        ...OK,
+        stock: [],
+        waste: [],
+        columns: [{ down: [], up: Array.from({ length: 50 }, (_, i) => i + 2) }, ...OK.columns.slice(1).map(() => ({ down: [], up: [] }))],
+        foundations: [2, 0, 0, 0],
+      },
+    ],
   ])('with %s opens', async (_name, body) => {
     fakeServer({ solitaire: body });
     const { result } = await openSolitaire();

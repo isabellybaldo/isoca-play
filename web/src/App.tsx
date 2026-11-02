@@ -239,7 +239,9 @@ export default function App() {
         game={solitaire.state}
         onGame={solitaire.setState}
         ready={solitaire.ready}
-        online={online}
+        // A load answered from the device knows nothing of the server's game, and a deal now
+        // would be saved over it. No new deal until the server itself has answered.
+        online={online && solitaire.saving !== 'offline'}
         unplayable={solitaire.unplayable}
         onBack={goHome}
       />

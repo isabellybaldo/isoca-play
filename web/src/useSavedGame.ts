@@ -72,8 +72,8 @@ function isPlayableSudoku(body: unknown): boolean {
 const isCards = (value: unknown): value is number[] =>
   isNumbers(value) && value.every((n) => Number.isInteger(n) && n >= 0 && n < 52);
 
-// All 52 cards are somewhere, and undo can read the history. Unknown fields are welcome. The
-// rules own what a legal position is.
+// All 52 cards are somewhere, once each, and undo can read the history. Unknown fields are
+// welcome. The rules own what a legal position is.
 function isPlayableSolitaire(body: unknown): boolean {
   if (!isRecord(body) || !isCards(body.deal) || body.deal.length !== 52 || new Set(body.deal).size !== 52) return false;
   const { stock, waste, columns, foundations, history, status } = body;
@@ -82,12 +82,15 @@ function isPlayableSolitaire(body: unknown): boolean {
   if (!columns.every((c) => isRecord(c) && isCards(c.down) && isCards(c.up))) return false;
   if (!isNumbers(foundations) || foundations.length !== 4) return false;
   if (!foundations.every((n) => Number.isInteger(n) && n >= 0 && n <= 13)) return false;
-  const cards = (columns as { down: number[]; up: number[] }[]).reduce(
-    (sum, c) => sum + c.down.length + c.up.length,
-    stock.length + waste.length + foundations.reduce((a, b) => a + b, 0),
-  );
+  const cards = [
+    ...stock,
+    ...waste,
+    ...(columns as { down: number[]; up: number[] }[]).flatMap((c) => [...c.down, ...c.up]),
+    ...foundations.flatMap((count, suit) => Array.from({ length: count }, (_, i) => suit * 13 + i)),
+  ];
   return (
-    cards === 52 &&
+    cards.length === 52 &&
+    new Set(cards).size === 52 &&
     Array.isArray(history) &&
     history.every(isHistoryEntry) &&
     ['playing', 'won'].includes(status as string)

@@ -29,14 +29,23 @@ export default function SolitaireGame({
   const { tip, ask } = useTip(game);
   const firstDeal = useRef(false);
 
-  // With no game on the table, one that arrives from another device meanwhile is kept.
-  const deal = async () => {
+  // A problem is about the game it happened to: once that has moved on, it is old news.
+  useEffect(() => setProblem(''), [game?.history, game?.deal]);
+
+  // The answer takes a while, and the game may have changed by then. With none on the table,
+  // one that has arrived is kept. A tap that asked nothing, as there was nothing to lose,
+  // does not take moves made since. A confirmed one does what the player said.
+  const deal = async (confirmed = false) => {
     const onTable = game?.deal;
     setStarting(true);
     setProblem('');
     try {
       const next = newSolitaire((await askForDeal(onTable)).deal);
-      onGame(onTable ? () => next : (held) => held ?? next);
+      onGame((held) => {
+        if (!held) return next;
+        if (!onTable) return held;
+        return confirmed || !hasMovesToLose(held) ? next : held;
+      });
     } catch (error) {
       setProblem(newGameProblem(error));
     } finally {
@@ -61,25 +70,29 @@ export default function SolitaireGame({
       <main className="sol-game" inert={asking}>
         <div className="sol-bar">
           <button type="button" className="back" aria-label="Back to home" onClick={onBack}>Back</button>
-          <button
-            type="button"
-            className="back"
-            disabled={!game || game.history.length === 0}
-            onClick={() => onGame((g) => g && undo(g))}
-          >
-            Return
-          </button>
-          <button
-            type="button"
-            className="back"
-            disabled={!game || won}
-            onClick={() => {
-              setProblem('');
-              ask();
-            }}
-          >
-            Tip
-          </button>
+          {game && (
+            <>
+              <button
+                type="button"
+                className="back"
+                disabled={game.history.length === 0}
+                onClick={() => onGame((g) => g && undo(g))}
+              >
+                Return
+              </button>
+              <button
+                type="button"
+                className="back"
+                disabled={won}
+                onClick={() => {
+                  setProblem('');
+                  ask();
+                }}
+              >
+                Tip
+              </button>
+            </>
+          )}
           {(game || online) && (
             <button
               type="button"
@@ -111,7 +124,7 @@ export default function SolitaireGame({
           onKeep={() => setAsking(false)}
           onConfirm={() => {
             setAsking(false);
-            void deal();
+            void deal(true);
           }}
         />
       )}

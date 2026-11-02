@@ -219,6 +219,44 @@ describe('New game', () => {
     expect(holding.game!.deal).not.toEqual(FRESH.deal);
   });
 
+  // The request is held until `during` has happened.
+  async function answeredAfter(tap: () => Promise<void>, during: () => void) {
+    let answer = () => {};
+    server.gate = new Promise<void>((resolve) => (answer = resolve));
+    await tap();
+    await settle();
+    act(during);
+    server.gate = null;
+    answer();
+    await settle();
+  }
+
+  test('a New game that asked nothing keeps a game that has since got moves', async () => {
+    const user = await open(FRESH);
+    await answeredAfter(() => user.click(button('New game')), () => holding.set((s) => s && tapPile(s)));
+    expect(holding.game!.deal).toEqual(FRESH.deal);
+    expect(holding.game!.history).toEqual(['d']);
+  });
+
+  test('a New game that asked nothing keeps moves that arrived from another device', async () => {
+    const user = await open(WON);
+    await answeredAfter(() => user.click(button('New game')), () => holding.set(PLAYED));
+    expect(holding.game).toBe(PLAYED);
+  });
+
+  test('a New game that asked nothing still replaces a game with nothing to lose', async () => {
+    const user = await open(FRESH);
+    await answeredAfter(() => user.click(button('New game')), () => holding.set(WON));
+    expect(holding.game).toEqual(newSolitaire(SECOND));
+  });
+
+  test('a confirmed New game replaces the game, whatever has happened since', async () => {
+    const user = await open(PLAYED);
+    await user.click(button('New game'));
+    await answeredAfter(() => user.click(button('Start new game')), () => holding.set((s) => s && tapPile(s)));
+    expect(holding.game).toEqual(newSolitaire(SECOND));
+  });
+
   test('a New game that fails leaves the game alone and says so', async () => {
     server.answer = ({ path }) => (path === '/api/new/solitaire' ? 503 : undefined);
     const user = await open(FRESH);
@@ -254,10 +292,42 @@ describe('the bar and the line', () => {
     expect(button('Tip').disabled).toBe(true);
   });
 
-  test('Return and Tip are disabled with no game', async () => {
+  test('with no game there is only the note, Back and New game', async () => {
     await open(null, { unplayable: true });
-    expect(button('Return').disabled).toBe(true);
-    expect(button('Tip').disabled).toBe(true);
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Back', 'New game']);
+    expect(line()).toBe('The saved game could not be opened.');
+  });
+
+  test('with no game and no connection there is only the note and Back', async () => {
+    await open(null, { online: false });
+    expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual(['Back']);
+  });
+
+  test('a problem goes once the game moves on, and does not hide a win', async () => {
+    server.answer = ({ path }) => (path === '/api/new/solitaire' ? 503 : undefined);
+    const user = await open(FRESH);
+    await user.click(button('New game'));
+    await settle();
+    expect(line()).toBe('That did not work. Try again.');
+
+    act(() => holding.set(WON));
+    expect(line()).toBe('You won.');
+  });
+
+  test('a problem goes with a move, and with a game from another deal', async () => {
+    server.answer = ({ path }) => (path === '/api/new/solitaire' ? 503 : undefined);
+    const user = await open(FRESH);
+    await user.click(button('New game'));
+    await settle();
+    act(() => holding.set((s) => s && tapPile(s)));
+    expect(line()).toBe('');
+
+    await user.click(button('New game'));
+    await user.click(button('Start new game'));
+    await settle();
+    expect(line()).toBe('That did not work. Try again.');
+    act(() => holding.set(newSolitaire(SECOND)));
+    expect(line()).toBe('');
   });
 
   test('a win shows its note', async () => {
