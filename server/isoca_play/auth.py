@@ -30,7 +30,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Redirect
 from starlette.concurrency import run_in_threadpool
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from . import db
+from . import db, stats
 from .config import Settings
 
 log = logging.getLogger(__name__)
@@ -180,12 +180,12 @@ def _attempt(settings: Settings, ip: str, password: str, old_token: str | None) 
         if not (matches and row):
             _record_failure(conn, ip, now)
             log.warning("login failure from %r", ip)
-            return _login_page(WRONG_MESSAGE, 401)
+            return _login_page(WRONG_MESSAGE, 401, stats=stats.login_section(settings))
         token = _start_session(conn, ip, now, old_token, row[0])
         if token is None:
             _record_failure(conn, ip, now)
             log.warning("login failure from %r (password changed mid-check)", ip)
-            return _login_page(WRONG_MESSAGE, 401)
+            return _login_page(WRONG_MESSAGE, 401, stats=stats.login_section(settings))
         return token
     finally:
         conn.close()
@@ -299,10 +299,12 @@ def _login_template() -> str:
     return (PUBLIC_DIR / "login.html").read_text(encoding="utf-8")
 
 
-def _login_page(message: str, status: int, headers: dict[str, str] | None = None) -> HTMLResponse:
+def _login_page(
+    message: str, status: int, headers: dict[str, str] | None = None, stats: str = ""
+) -> HTMLResponse:
     # Messages are the constants above; nothing from the request reaches the page.
     shown = f'<p class="message" role="alert">{message}</p>' if message else ""
-    html = _login_template().replace("<!--message-->", shown)
+    html = _login_template().replace("<!--message-->", shown).replace("<!--stats-->", stats)
     return HTMLResponse(html, status, headers={**NO_STORE, **(headers or {})})
 
 
@@ -340,7 +342,7 @@ router = APIRouter()
 def login_page(request: Request) -> Response:
     if request.state.signed_in:
         return RedirectResponse("/", 302, headers=NO_STORE)
-    return _login_page("", 200)
+    return _login_page("", 200, stats=stats.login_section(request.app.state.settings))
 
 
 @router.post("/login")

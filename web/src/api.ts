@@ -1,6 +1,7 @@
 import type { Level } from './mahjong/layouts';
 import { CACHED_HEADER } from './offline';
 import type { Tile } from './mahjong/rules';
+import type { GameRecord } from './stats/run';
 import type { Puzzle } from './sudoku/rules';
 
 export type GameName = 'mahjong' | 'solitaire' | 'sudoku';
@@ -52,6 +53,35 @@ export async function loadSave(game: GameName): Promise<{ body: unknown; cached:
 
 export async function putSave(game: GameName, body: unknown): Promise<void> {
   await request(`/api/save/${game}`, withJson('PUT', body), checked);
+}
+
+export async function sendGameRecord(record: GameRecord): Promise<void> {
+  await request('/api/stats/game', withJson('POST', record), checked);
+}
+
+type Counted = {
+  played: number;
+  won: number;
+  win_rate: number | null;
+  avg_win_seconds: number | null;
+  best_win_seconds: number | null;
+};
+export type GameTotals = Counted & {
+  game: GameName;
+  lost: number;
+  abandoned: number;
+  avg_returns: number | null;
+  avg_tips: number | null;
+  levels: (Counted & { level: Level })[];
+};
+export type MapTotals = Counted & { map: string; name: string; lost: number; abandoned: number };
+export type StatsAnswer = {
+  public: { games: GameTotals[]; maps: MapTotals[]; longest_streak: number } | null;
+  private: { daily: { day: string; games: number }[]; current_streak: number };
+};
+
+export async function loadStats(today: string): Promise<StatsAnswer> {
+  return request(`/api/stats?today=${encodeURIComponent(today)}`, {}, (response) => checked(response).json());
 }
 
 export async function newMahjong(layoutId: string): Promise<{ layout: string; tiles: Tile[] }> {

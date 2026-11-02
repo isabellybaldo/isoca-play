@@ -54,6 +54,7 @@ class FakeChannel {
 export function fakeServer(saves: Record<string, unknown> = {}) {
   const server = {
     saves,
+    stats: { public: null, private: { daily: [], current_streak: 0 } } as unknown,
     requests: [] as Seen[],
     answer: null as null | ((seen: Seen) => number | undefined),
     gate: null as null | Promise<unknown>, // a request waits here before it is answered
@@ -102,6 +103,8 @@ export function fakeServer(saves: Record<string, unknown> = {}) {
     if (path === '/api/new/solitaire') {
       return json({ deal: DEALS.find((d) => JSON.stringify(d) !== JSON.stringify(body.not)) });
     }
+    if (path === '/api/stats/game') return new Response(null, { status: 204 });
+    if (path.startsWith('/api/stats')) return json(server.stats);
     if (path === '/logout') return new Response(null, { status: 200 });
     return json({ detail: 'no route' }, 404);
   });

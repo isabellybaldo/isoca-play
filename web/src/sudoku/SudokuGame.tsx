@@ -3,6 +3,7 @@ import { newGameProblem, newSudoku as askForPuzzle, REPLACE_UNPLAYABLE, startNot
 import ConfirmDialog from '../ConfirmDialog';
 import type { Level } from '../mahjong/layouts';
 import ResumeButton from '../ResumeButton';
+import { useOnScreen, type Tracker } from '../stats/useTracked';
 import { glowOf, hasMovesToLose, newSudoku, pressDigit, selectCell, setMode, undo, wrongCells, type SudokuState } from './rules';
 import { tipChain, type TipStep } from './tips';
 import './sudoku.css';
@@ -122,12 +123,15 @@ function Game({
   onChange,
   online,
   onLevels,
+  tracker,
 }: {
   state: SudokuState;
   onChange: (update: (s: SudokuState) => SudokuState) => void;
   online: boolean;
   onLevels: () => void;
+  tracker?: Tracker;
 }) {
+  useOnScreen(tracker);
   const level = state.puzzle.level;
   const [asking, setAsking] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -154,6 +158,7 @@ function Game({
   const showTip = (v: TipView) => setTip({ values: state.values, notes: state.notes, history: state.history, view: v });
   // Worked out here, on the tap, never on a render.
   const ask = () => {
+    tracker?.tip();
     if (wrongCells(state).length > 0) return showTip({ kind: 'wrong' });
     const steps = tipChain(state.values);
     showTip(steps.length > 0 ? { kind: 'steps', steps, at: 0 } : { kind: 'none' });
@@ -280,6 +285,7 @@ export default function SudokuGame({
   online = true,
   unplayable = false,
   onBack,
+  tracker,
 }: {
   game: SudokuState | null;
   onGame: (action: SetStateAction<SudokuState | null>) => void;
@@ -287,6 +293,7 @@ export default function SudokuGame({
   online?: boolean;
   unplayable?: boolean;
   onBack: () => void;
+  tracker?: Tracker;
 }) {
   const [playing, setPlaying] = useState(false);
   const [replacing, setReplacing] = useState<Level | null>(null);
@@ -300,6 +307,7 @@ export default function SudokuGame({
         onChange={(update) => onGame((g) => g && update(g))}
         online={online}
         onLevels={() => setPlaying(false)}
+        tracker={tracker}
       />
     );
   }

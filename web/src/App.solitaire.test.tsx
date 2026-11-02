@@ -55,7 +55,7 @@ test('opening solitaire with no save deals, saves, and Back goes home', async ()
 
   await user.click(button('Solitaire'));
   await settle();
-  expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+  expect(server.puts('solitaire')).toEqual([expect.objectContaining(newSolitaire(DEALS[0]))]);
   expect(button('Pile, 24 cards')).toBeTruthy();
 
   await user.click(button('Back to home'));
@@ -120,7 +120,7 @@ describe('a load answered from the device says nothing about the server', () => 
     server.worker = null;
     await past1s();
     expect(button('Pile, 24 cards')).toBeTruthy();
-    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+    expect(server.puts('solitaire')).toEqual([expect.objectContaining(newSolitaire(DEALS[0]))]);
   });
 });
 
@@ -168,7 +168,7 @@ describe('the first deal asks the server again', () => {
     await settle();
     expect(askedSolitaire(server)).toBe(before + 1);
     expect(server.requests.filter((r) => r.path === '/api/new/solitaire')).toHaveLength(1);
-    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+    expect(server.puts('solitaire')).toEqual([expect.objectContaining(newSolitaire(DEALS[0]))]);
     expect(button('Pile, 24 cards')).toBeTruthy();
   });
 
@@ -186,7 +186,7 @@ describe('the first deal asks the server again', () => {
       await new Promise((resolve) => setTimeout(resolve, 1200));
     });
     expect(button('Pile, 24 cards')).toBeTruthy();
-    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+    expect(server.puts('solitaire')).toEqual([expect.objectContaining(newSolitaire(DEALS[0]))]);
   });
 
   test('a failed ask deals nothing and shows the note', async () => {
@@ -220,7 +220,7 @@ describe('the first deal asks the server again', () => {
     await user.click(button('New game'));
     await settle();
     expect(askedSolitaire(server)).toBe(before);
-    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[1])]);
+    expect(server.puts('solitaire')).toEqual([expect.objectContaining(newSolitaire(DEALS[1]))]);
   });
 });
 

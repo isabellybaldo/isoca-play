@@ -3,12 +3,13 @@ import { ApiError, loadSave, putSave, type GameName } from './api';
 import { LAYOUTS } from './mahjong/layouts';
 import type { MahjongState } from './mahjong/rules';
 import { isHistoryEntry, type SolitaireState } from './solitaire/rules';
+import type { Run } from './stats/run';
 import type { SudokuState } from './sudoku/rules';
 
 // A mahjong save names its layout, and the app looks the shape up. A sudoku state
 // already holds its puzzle.
-export type MahjongSave = { layout: string; state: MahjongState };
-export type Saved = { mahjong: MahjongSave; solitaire: SolitaireState; sudoku: SudokuState };
+export type MahjongSave = { layout: string; state: MahjongState; run?: Run };
+export type Saved = { mahjong: MahjongSave; solitaire: SolitaireState & { run?: Run }; sudoku: SudokuState & { run?: Run } };
 export type SaveStatus = 'saved' | 'retrying' | 'offline';
 
 const FIRST_WAIT = 1000;

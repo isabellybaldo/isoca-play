@@ -3,6 +3,7 @@ import { newGameProblem, newSolitaire as askForDeal, REPLACE_UNPLAYABLE, startNo
 import ConfirmDialog from '../ConfirmDialog';
 import { tooShortSideways } from './layout';
 import { hasMovesToLose, newSolitaire, undo, type SolitaireState } from './rules';
+import { useOnScreen, type Tracker } from '../stats/useTracked';
 import SolitaireTable, { useTip, useViewport } from './SolitaireTable';
 import './solitaire.css';
 
@@ -18,6 +19,7 @@ export default function SolitaireGame({
   unplayable,
   check,
   onBack,
+  tracker,
 }: {
   game: SolitaireState | null;
   onGame: (update: SetStateAction<SolitaireState | null>) => void;
@@ -26,7 +28,9 @@ export default function SolitaireGame({
   unplayable: boolean;
   check: () => Promise<boolean>;
   onBack: () => void;
+  tracker?: Tracker;
 }) {
+  useOnScreen(tracker, game !== null);
   const [asking, setAsking] = useState(false);
   const [starting, setStarting] = useState(false);
   const [problem, setProblem] = useState('');
@@ -113,6 +117,7 @@ export default function SolitaireGame({
                 disabled={won}
                 onClick={() => {
                   setProblem('');
+                  tracker?.tip();
                   ask();
                 }}
               >

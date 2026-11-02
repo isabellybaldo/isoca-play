@@ -77,12 +77,13 @@ test('mahjong goes from setup to a real deal and back, keeping the level', async
   expect(screen.getByRole('heading', { name: 'isoca play' })).toBeTruthy();
 });
 
-test('home has the three games and a log out button', async () => {
+test('home has the three games, stats and a log out button', async () => {
   await open();
   expect(screen.getAllByRole('button').map((b) => b.textContent)).toEqual([
     expect.stringContaining('Mahjong'),
     expect.stringContaining('Sudoku'),
     expect.stringContaining('Solitaire'),
+    'Stats',
     'Log out',
   ]);
 });

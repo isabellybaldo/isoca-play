@@ -122,3 +122,11 @@ button:active { transform: translate(3px, 3px); box-shadow: none; }
   line-height: 1.1;
   color: var(--accent);
 }
+
+/* The totals under the form: plain lists that stack, never wider than the card. */
+.stats { display: grid; gap: 16px; padding: 8px 0 16px; font-size: 20px; line-height: 1.15; }
+.stats h2 { font-family: var(--px); font-size: 12px; line-height: 1.4; font-weight: 400; color: var(--accent); }
+.stats h3 { font-size: 22px; font-weight: 400; color: var(--line); }
+.stats section { display: grid; gap: 6px; }
+.stats ul { list-style: none; display: grid; gap: 2px; }
+.stats li { overflow-wrap: anywhere; }
