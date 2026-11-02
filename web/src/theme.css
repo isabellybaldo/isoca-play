@@ -84,6 +84,9 @@ button {
 @media (min-width: 640px) {
   .games { grid-template-columns: 1fr 1fr; }
 }
+@media (min-width: 860px) {
+  .games { grid-template-columns: repeat(3, 1fr); }
+}
 
 .game {
   display: flex;
@@ -97,6 +100,7 @@ button {
   box-shadow: 6px 6px 0 var(--line);
 }
 .game.sudoku { border-color: var(--accent); box-shadow: 6px 6px 0 var(--accent); }
+.game.solitaire { border-color: var(--rose); box-shadow: 6px 6px 0 var(--rose); }
 .game:active { transform: translate(6px, 6px); box-shadow: none; }
 
 .game-art { display: block; height: 138px; position: relative; }
@@ -105,6 +109,7 @@ button {
 
 /* A loose heap of tiles, each lying over the last */
 .heap { position: absolute; width: 54px; height: 69px; }
+.heap.card-heap { width: 48px; height: 72px; }
 .heap:nth-child(1) { left: 0; top: 48px; }
 .heap:nth-child(2) { left: 44px; top: 12px; }
 .heap:nth-child(3) { left: 92px; top: 56px; }

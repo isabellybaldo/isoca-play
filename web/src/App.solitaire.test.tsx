@@ -11,17 +11,6 @@ vi.mock('./api', async (importOriginal) => ({
   goToLogin: vi.fn(),
 }));
 
-// The home page has no solitaire card yet, so this stands in for it.
-vi.mock('./Home', () => ({
-  default: ({ onOpen, onLogOut }: { onOpen: (screen: 'solitaire') => void; onLogOut: () => void }) => (
-    <main>
-      <h1>isoca play</h1>
-      <button type="button" onClick={() => onOpen('solitaire')}>Solitaire</button>
-      <button type="button" onClick={onLogOut}>Log out</button>
-    </main>
-  ),
-}));
-
 // A save can pass every check and still not draw; this stands in for whatever that is.
 const draws = vi.hoisted(() => ({ fail: false }));
 vi.mock('./solitaire/SolitaireTable', async (importOriginal) => {
@@ -54,7 +43,8 @@ async function open() {
   return view;
 }
 
-const button = (name: string) => screen.getByRole('button', { name });
+// The home card's name is its whole text, so 'Solitaire' alone is matched as a start.
+const button = (name: string) => screen.getByRole('button', { name: name === 'Solitaire' ? /^Solitaire/ : name });
 
 test('opening solitaire with no save deals, saves, and Back goes home', async () => {
   const server = fakeServer();
