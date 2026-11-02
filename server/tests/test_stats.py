@@ -1,9 +1,14 @@
+import json
+import re
+from datetime import date, timedelta
+
 import pytest
 
 from conftest import BASE_URL
-from isoca_play import db
+from isoca_play import db, stats
 
 ORIGIN = {"Origin": BASE_URL}
+DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 
 @pytest.fixture
@@ -129,3 +134,123 @@ def test_no_session_cannot_send_a_record(client, settings):
 def test_a_foreign_origin_cannot_send_a_record(client_logged_in, settings):
     assert post(client_logged_in, record(), {"Origin": "https://elsewhere.example"}).status_code == 403
     assert rows(settings) == 0
+
+
+# Totals
+
+
+@pytest.fixture
+def conn(settings):
+    c = db.connect(settings.db_path)
+    yield c
+    c.close()
+
+
+def add(settings, *records):
+    for body in records:
+        row = stats.validate_record(body)
+        assert row is not None, body
+        stats._store(settings, row)
+
+
+def game_totals(conn, game="sudoku"):
+    return next(g for g in stats.public_totals(conn)["games"] if g["game"] == game)
+
+
+def test_no_records_is_none(conn):
+    assert stats.public_totals(conn) is None
+
+
+def test_win_rate_counts_abandoned_games_too(settings, conn):
+    add(settings, record(1), record(2, result="abandoned"))
+    totals = game_totals(conn)
+    assert (totals["played"], totals["won"], totals["abandoned"], totals["win_rate"]) == (2, 1, 1, 50)
+
+
+def test_times_count_wins_only(settings, conn):
+    add(settings, record(1, seconds=100), record(2, seconds=200), record(3, result="abandoned", seconds=5))
+    totals = game_totals(conn)
+    assert (totals["best_win_seconds"], totals["avg_win_seconds"]) == (100, 150)
+
+
+def test_returns_and_tips_average_over_all_games(settings, conn):
+    add(settings, record(1, returns=4, tips=1), record(2, result="abandoned", returns=0, tips=2))
+    totals = game_totals(conn)
+    assert (totals["avg_returns"], totals["avg_tips"]) == (2, 2)
+
+
+def test_levels_are_counted_apart_and_in_order(settings, conn):
+    add(settings, record(1, level="hard"), record(2, level="easy", result="abandoned"), record(3, level="hard"))
+    levels = game_totals(conn)["levels"]
+    assert [(l["level"], l["played"], l["won"]) for l in levels] == [("easy", 1, 0), ("hard", 2, 2)]
+
+
+def test_maps_list_their_counts_with_the_most_played_first(settings, conn):
+    add(
+        settings,
+        mahjong(1, "frame"),
+        mahjong(2, "fort"),
+        mahjong(3, "fort", result="lost"),
+        mahjong(4, "fort", result="abandoned"),
+    )
+    maps = stats.public_totals(conn)["maps"]
+    assert [m["map"] for m in maps] == ["fort", "frame"]
+    assert maps[0]["name"] == "Fort"
+    assert (maps[0]["played"], maps[0]["won"], maps[0]["lost"], maps[0]["abandoned"]) == (3, 1, 1, 1)
+    assert maps[0]["win_rate"] == 33
+
+
+def test_a_map_never_won_has_no_time(settings, conn):
+    add(settings, mahjong(1, result="lost"))
+    only = stats.public_totals(conn)["maps"][0]
+    assert only["avg_win_seconds"] is None and only["best_win_seconds"] is None
+
+
+def test_longest_streak_uses_days_played(settings, conn):
+    add(settings, record(1, day="2026-03-03", days=["2026-03-01", "2026-03-02", "2026-03-03"]))
+    assert stats.public_totals(conn)["longest_streak"] == 3
+
+
+def test_a_gap_breaks_a_streak(settings, conn):
+    add(settings, record(1, days=["2026-03-01", "2026-03-02"]), record(2, days=["2026-03-02", "2026-03-04"]))
+    assert stats.public_totals(conn)["longest_streak"] == 2
+
+
+@pytest.mark.parametrize("last, streak", [("2026-03-10", 2), ("2026-03-09", 2), ("2026-03-08", 0)])
+def test_current_streak_ends_today_or_yesterday(settings, conn, last, streak):
+    before = (date.fromisoformat(last) - timedelta(days=1)).isoformat()
+    add(settings, record(1, days=[before, last]))
+    assert stats.private_totals(conn, date(2026, 3, 10))["current_streak"] == streak
+
+
+def test_daily_counts_finished_games_by_day(settings, conn):
+    add(settings, record(1, day="2026-03-10", days=["2026-03-08", "2026-03-10"]), record(2, day="2026-03-10"), record(3, day="2026-01-01"))
+    daily = stats.private_totals(conn, date(2026, 3, 10))["daily"]
+    assert len(daily) == 30
+    assert daily[-1] == {"day": "2026-03-10", "games": 2}
+    assert daily[-3] == {"day": "2026-03-08", "games": 0}
+
+
+def test_public_totals_hold_no_date(settings, conn):
+    add(settings, record(1), mahjong(2), record(3, game="solitaire", level=None, unsolved=None, turns=1))
+    assert not DATE.search(json.dumps(stats.public_totals(conn)))
+
+
+def test_the_stats_route_needs_a_session(client):
+    assert client.get("/api/stats", follow_redirects=False).status_code in (302, 401)
+
+
+def test_the_stats_route_answers_public_and_private(client_logged_in, settings):
+    add(settings, record(1, days=["2026-03-10"], day="2026-03-10"))
+    r = client_logged_in.get("/api/stats?today=2026-03-10")
+    assert r.status_code == 200 and r.headers["cache-control"] == "no-store"
+    body = r.json()
+    assert body["public"]["games"][0]["played"] == 1
+    assert body["private"]["current_streak"] == 1
+    assert body["private"]["daily"][-1] == {"day": "2026-03-10", "games": 1}
+
+
+def test_a_malformed_today_uses_the_servers_date(client_logged_in):
+    r = client_logged_in.get("/api/stats?today=nope")
+    assert r.status_code == 200
+    assert len(r.json()["private"]["daily"]) == 30

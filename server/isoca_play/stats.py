@@ -8,10 +8,12 @@ out a date without one.
 from __future__ import annotations
 
 import json
-from datetime import date
+import sqlite3
+from collections import Counter
+from datetime import date, timedelta
 
 from fastapi import APIRouter, FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from starlette.concurrency import run_in_threadpool
 
 from . import db, mahjong, saves
@@ -22,6 +24,7 @@ MAX_ID = 64
 MAX_COUNT = 1_000_000
 MAX_SECONDS = 30 * 24 * 60 * 60
 MAX_DAYS = 400
+DAILY_SPAN = 30
 
 router = APIRouter()
 
@@ -114,6 +117,120 @@ async def post_game(request: Request) -> Response:
         return saves.refuse(400, "Not a game record")
     await run_in_threadpool(_store, request.app.state.settings, row)
     return Response(status_code=204, headers=saves.NO_STORE)
+
+
+# Totals
+
+
+def _rows(conn: sqlite3.Connection) -> list[dict]:
+    names = ("game", "level", "result", "day", "days", "seconds", "returns", "tips", "map")
+    query = f"SELECT {', '.join(names)} FROM game_record"
+    return [dict(zip(names, row)) for row in conn.execute(query)]
+
+
+def _average(values: list[int]) -> int | None:
+    return round(sum(values) / len(values)) if values else None
+
+
+def _count(rows: list[dict]) -> dict:
+    """What a game, a level and a map all report. A time counts wins only."""
+    wins = [r["seconds"] for r in rows if r["result"] == "won"]
+    return {
+        "played": len(rows),
+        "won": len(wins),
+        "win_rate": round(100 * len(wins) / len(rows)) if rows else None,
+        "avg_win_seconds": _average(wins),
+        "best_win_seconds": min(wins) if wins else None,
+    }
+
+
+def _ended(rows: list[dict]) -> dict:
+    return {
+        "lost": sum(r["result"] == "lost" for r in rows),
+        "abandoned": sum(r["result"] == "abandoned" for r in rows),
+    }
+
+
+def _days_played(rows: list[dict]) -> set[date]:
+    return {date.fromisoformat(d) for r in rows for d in json.loads(r["days"])}
+
+
+def _longest_streak(days: set[date]) -> int:
+    longest = 0
+    for day in days:
+        if day - timedelta(days=1) in days:
+            continue  # counted from the start of its run
+        length = 1
+        while day + timedelta(days=length) in days:
+            length += 1
+        longest = max(longest, length)
+    return longest
+
+
+def public_totals(conn: sqlite3.Connection) -> dict | None:
+    """Everything anyone may read, or None with no records. It must never hold a date."""
+    rows = _rows(conn)
+    if not rows:
+        return None
+    games = []
+    for game in sorted(saves.GAMES):
+        of_game = [r for r in rows if r["game"] == game]
+        if not of_game:
+            continue
+        levels = [
+            {"level": level, **_count(of_level)}
+            for level in LEVELS
+            if (of_level := [r for r in of_game if r["level"] == level])
+        ]
+        games.append(
+            {
+                "game": game,
+                **_count(of_game),
+                **_ended(of_game),
+                "avg_returns": _average([r["returns"] for r in of_game]),
+                "avg_tips": _average([r["tips"] for r in of_game]),
+                "levels": levels,
+            }
+        )
+    maps = [
+        {"map": map_id, "name": mahjong._LAYOUT_BY_ID[map_id]["name"], **_count(of_map), **_ended(of_map)}
+        for map_id in mahjong._LAYOUT_BY_ID
+        if (of_map := [r for r in rows if r["map"] == map_id])
+    ]
+    maps.sort(key=lambda m: -m["played"])
+    return {"games": games, "maps": maps, "longest_streak": _longest_streak(_days_played(rows))}
+
+
+def private_totals(conn: sqlite3.Connection, today: date) -> dict:
+    """What involves dates, for the signed-in app only."""
+    rows = _rows(conn)
+    finished = Counter(r["day"] for r in rows)
+    span = [today - timedelta(days=back) for back in range(DAILY_SPAN - 1, -1, -1)]
+    days = _days_played(rows)
+    # A streak still stands on a day with nothing played yet.
+    end = today if today in days else today - timedelta(days=1)
+    current = 0
+    while end - timedelta(days=current) in days:
+        current += 1
+    return {
+        "daily": [{"day": d.isoformat(), "games": finished[d.isoformat()]} for d in span],
+        "current_streak": current,
+    }
+
+
+def _both(settings: Settings, today: date) -> dict:
+    conn = db.connect(settings.db_path)
+    try:
+        return {"public": public_totals(conn), "private": private_totals(conn, today)}
+    finally:
+        conn.close()
+
+
+@router.get("/api/stats")
+def get_stats(request: Request, today: str = "") -> Response:
+    settings: Settings = request.app.state.settings
+    day = date.fromisoformat(today) if _is_day(today) else date.fromtimestamp(settings.now())
+    return JSONResponse(_both(settings, day), headers=saves.NO_STORE)
 
 
 def install(app: FastAPI) -> None:
