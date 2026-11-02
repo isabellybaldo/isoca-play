@@ -6,8 +6,13 @@ import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import App from '../App';
 import { blanked, fakeServer, SOLUTION } from '../fakeServer.testutil';
 import { newSudoku, type SudokuState } from '../sudoku/rules';
-import type { GameRecord } from './run';
+import { track, type GameRecord } from './run';
 import { useTracked } from './useTracked';
+
+vi.mock('./run', async (importOriginal) => {
+  const real = await importOriginal<typeof import('./run')>();
+  return { ...real, track: vi.fn(real.track) };
+});
 
 const entry = { cell: 0, value: 0, notes: 0 };
 
@@ -92,6 +97,15 @@ describe('the clock', () => {
     act(() => result.current.tracker.tip());
     move();
     expect((saved.state as unknown as { run: { tips: number } }).run.tips).toBe(1);
+  });
+
+  test('a fault in the counting still lets the move through', () => {
+    const { saved, move } = setup();
+    vi.mocked(track).mockImplementationOnce(() => {
+      throw new Error('broken');
+    });
+    move();
+    expect((saved.state as SudokuState).history).toHaveLength(1);
   });
 
   test('the crash screen new game records the game as abandoned', () => {

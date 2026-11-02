@@ -76,6 +76,16 @@ describe('the outbox', () => {
     expect(sent).toEqual([]);
   });
 
+  test('storage that reads but will not write sends each record once, not forever', async () => {
+    const sent = answering(() => 204);
+    addRecords([record('a')]);
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('full');
+    });
+    await sendRecords();
+    expect(sent).toEqual(['a']);
+  });
+
   test.each(['not json', '{"a":1}', '[1,2]'])('%s in storage reads as empty', async (stored) => {
     const sent = answering(() => 204);
     localStorage.setItem(OUTBOX_KEY, stored);

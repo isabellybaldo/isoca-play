@@ -39,7 +39,10 @@ let sending: Promise<void> | null = null;
 
 // Oldest first, until the server stops taking them. The next load or reconnect tries again.
 async function sendAll(): Promise<void> {
-  for (let next = read()[0]; next; next = read()[0]) {
+  // Storage that reads but will not write would hand back the same record for ever.
+  const tried = new Set<string>();
+  for (let next = read()[0]; next && !tried.has(next.id); next = read()[0]) {
+    tried.add(next.id);
     try {
       await sendGameRecord(next);
     } catch (error) {

@@ -51,7 +51,16 @@ export function useTracked<G extends GameName>(game: G, saved: Link<G>) {
     (prev: Saved[G] | null, next: Saved[G] | null) => {
       stopClock();
       const tick: Tick = { today: localDay(), ...pending.current, newId };
-      const { save, records, spent } = track(game, prev, next, tick);
+      // The rules' own change goes through whatever happens to the counting.
+      let result: ReturnType<typeof track<G>>;
+      try {
+        result = track(game, prev, next, tick);
+      } catch {
+        latest.current = next;
+        startClock();
+        return next;
+      }
+      const { save, records, spent } = result;
       if (spent) pending.current = { seconds: 0, tips: 0 };
       latest.current = save;
       startClock();
