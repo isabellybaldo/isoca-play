@@ -1,11 +1,13 @@
 import json
 import re
+import sqlite3
 from datetime import date, timedelta
 
 import pytest
+from argon2 import PasswordHasher
 
 from conftest import BASE_URL
-from isoca_play import db, stats
+from isoca_play import auth, db, stats
 
 ORIGIN = {"Origin": BASE_URL}
 DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -254,3 +256,67 @@ def test_a_malformed_today_uses_the_servers_date(client_logged_in):
     r = client_logged_in.get("/api/stats?today=nope")
     assert r.status_code == 200
     assert len(r.json()["private"]["daily"]) == 30
+
+
+# The login page
+
+
+def login_page(client):
+    r = client.get("/login")
+    assert r.status_code == 200
+    return r.text
+
+
+def test_no_records_no_section(client):
+    assert 'class="stats"' not in login_page(client)
+
+
+def test_the_form_comes_before_the_stats(client, settings):
+    add(settings, record())
+    page = login_page(client)
+    assert page.index("</form>") < page.index('class="stats"')
+
+
+def test_the_section_shows_the_totals(client, settings):
+    add(settings, record(1), mahjong(2, "fort"), mahjong(3, "fort", result="abandoned"))
+    page = login_page(client)
+    for shown in ("Sudoku", "Mahjong", "Fort", "100%", "50%", "Easy", "Longest streak"):
+        assert shown in page
+
+
+def test_no_date_reaches_the_login_page(client, settings):
+    add(settings, record(1, day="2026-03-10", days=["2026-03-09", "2026-03-10"]), mahjong(2, day="2026-03-11"))
+    assert not DATE.search(login_page(client))
+
+
+def test_nothing_built_from_no_games_shows_zero(client, settings):
+    add(settings, mahjong(1, result="lost"))
+    assert "–" in login_page(client)
+
+
+def test_a_wrong_password_page_keeps_the_stats(client, settings, sign_in):
+    conn = db.connect(settings.db_path)
+    conn.execute("INSERT INTO account (id, password_hash) VALUES (1, ?)", (PasswordHasher().hash("right password"),))
+    conn.close()
+    add(settings, record())
+    r = client.post("/login", data={"password": "wrong password"}, headers=ORIGIN)
+    assert r.status_code == 401 and 'class="stats"' in r.text
+
+
+def test_a_broken_database_still_serves_the_form(client, settings, monkeypatch):
+    add(settings, record())
+
+    def broken(_conn):
+        raise sqlite3.OperationalError("no")
+
+    monkeypatch.setattr(stats, "public_totals", broken)
+    page = login_page(client)
+    assert "<form" in page and 'class="stats"' not in page
+
+
+def test_public_paths_did_not_grow():
+    assert not any("stats" in path for path in auth.PUBLIC_PATHS)
+
+
+def test_a_signed_in_visit_still_goes_to_the_app(client_logged_in):
+    assert client_logged_in.get("/login", follow_redirects=False).status_code == 302

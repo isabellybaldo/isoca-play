@@ -7,7 +7,9 @@ out a date without one.
 
 from __future__ import annotations
 
+import html
 import json
+import logging
 import sqlite3
 from collections import Counter
 from datetime import date, timedelta
@@ -18,6 +20,8 @@ from starlette.concurrency import run_in_threadpool
 
 from . import db, mahjong, saves
 from .config import Settings
+
+logger = logging.getLogger(__name__)
 
 LEVELS = ("easy", "medium", "hard")
 MAX_ID = 64
@@ -231,6 +235,60 @@ def get_stats(request: Request, today: str = "") -> Response:
     settings: Settings = request.app.state.settings
     day = date.fromisoformat(today) if _is_day(today) else date.fromtimestamp(settings.now())
     return JSONResponse(_both(settings, day), headers=saves.NO_STORE)
+
+
+# The login page
+
+
+def _shown(value: int | None, unit: str = "") -> str:
+    return "–" if value is None else f"{value}{unit}"
+
+
+def _clock(seconds: int | None) -> str:
+    return "–" if seconds is None else f"{seconds // 60}:{seconds % 60:02d}"
+
+
+def _line(label: str, count: dict) -> str:
+    """One level or map. Everything shown is a constant or a number, escaped all the same."""
+    text = (
+        f"{label}: {count['played']} played, {count['won']} won ({_shown(count['win_rate'], '%')}), "
+        f"average win {_clock(count['avg_win_seconds'])}, best {_clock(count['best_win_seconds'])}"
+    )
+    if "lost" in count:
+        text += f", {count['lost']} lost, {count['abandoned']} abandoned"
+    return f"<li>{html.escape(text)}</li>"
+
+
+def _game_section(game: dict) -> str:
+    lines = [
+        _line("All", game),
+        f"<li>Average returns {_shown(game['avg_returns'])}, tips {_shown(game['avg_tips'])}</li>",
+        *(_line(level["level"].capitalize(), level) for level in game["levels"]),
+    ]
+    return f"<section><h3>{html.escape(game['game'].capitalize())}</h3><ul>{''.join(lines)}</ul></section>"
+
+
+def _render(totals: dict) -> str:
+    parts = [_game_section(game) for game in totals["games"]]
+    if totals["maps"]:
+        maps = "".join(_line(m["name"], m) for m in totals["maps"])
+        parts.append(f"<section><h3>Mahjong maps</h3><ul>{maps}</ul></section>")
+    parts.append(f"<p>Longest streak: {totals['longest_streak']} days</p>")
+    return f'<div class="stats"><h2>Stats</h2>{"".join(parts)}</div>'
+
+
+def login_section(settings: Settings) -> str:
+    """The totals as HTML, or nothing. Stats must never cost the login page its form."""
+    try:
+        conn = db.connect(settings.db_path)
+        try:
+            totals = public_totals(conn)
+        finally:
+            conn.close()
+        return _render(totals) if totals else ""
+    except Exception:
+        logger.exception("The login page goes without its stats")
+        return ""
 
 
 def install(app: FastAPI) -> None:
