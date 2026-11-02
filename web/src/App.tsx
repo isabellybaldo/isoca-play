@@ -22,6 +22,8 @@ import { clearDevice } from './offline';
 import ResumeButton from './ResumeButton';
 import { useSlotsSetting } from './mahjong/slotsSetting';
 import SaveMarker from './SaveMarker';
+import { sendRecords } from './stats/outbox';
+import { useTracked, type Tracker } from './stats/useTracked';
 import SolitaireGame from './solitaire/SolitaireGame';
 import SudokuGame from './sudoku/SudokuGame';
 import { useOnline, useSavedGame, type MahjongSave } from './useSavedGame';
@@ -37,6 +39,7 @@ function Mahjong({
   online,
   unplayable,
   onHome,
+  tracker,
 }: {
   level: Level;
   onLevel: (level: Level) => void;
@@ -46,6 +49,7 @@ function Mahjong({
   online: boolean;
   unplayable: boolean;
   onHome: () => void;
+  tracker: Tracker;
 }) {
   const [playing, setPlaying] = useState(false);
   const [replacing, setReplacing] = useState<Layout | null>(null);
@@ -68,6 +72,7 @@ function Mahjong({
         }
         online={online}
         onBack={() => setPlaying(false)}
+        tracker={tracker}
       />
     );
   }
@@ -141,6 +146,7 @@ const LOGOUT_OFFLINE = 'Logging out needs a connection.';
 const LOGOUT_FAILED = 'That did not work. Try again.';
 const LOGOUT_UNCONFIRMED = 'Log out could not be confirmed, you are still signed in.';
 const LOGOUT_PATIENCE = 3000;
+const STATS_PATIENCE = 1000; // stats are not worth holding up a log out
 
 // One game of each kind lives here, kept with the server, so Back never loses it and
 // any device opens where the last one stopped.
@@ -153,12 +159,23 @@ export default function App() {
   const mahjong = useSavedGame('mahjong');
   const solitaire = useSavedGame('solitaire');
   const sudoku = useSavedGame('sudoku');
+  const trackedMahjong = useTracked('mahjong', mahjong);
+  const trackedSolitaire = useTracked('solitaire', solitaire);
+  const trackedSudoku = useTracked('sudoku', sudoku);
   const online = useOnline();
   const goHome = () => setScreen('home');
   const sessionGone = mahjong.signedOut || solitaire.signedOut || sudoku.signedOut;
   const sessionAlive = mahjong.signedIn || solitaire.signedIn || sudoku.signedIn;
 
   useEffect(takeLoggedInMark, []);
+
+  // Finished games waiting on this device, from an earlier load or from being offline.
+  useEffect(() => {
+    const send = () => void sendRecords();
+    send();
+    window.addEventListener('online', send);
+    return () => window.removeEventListener('online', send);
+  }, []);
 
   // A log out left unconfirmed, on a boot that came back to the app. Said only once the
   // server has answered: a page from the worker's cache knows nothing about the session.
@@ -173,6 +190,7 @@ export default function App() {
     // A save still on its way would otherwise arrive after the session has ended.
     setLogoutNote('Saving your last moves.');
     const sent = await Promise.all([mahjong.flush(), solitaire.flush(), sudoku.flush()]);
+    await Promise.race([sendRecords(), new Promise((resolve) => setTimeout(resolve, STATS_PATIENCE))]);
     setLogoutNote('');
     if (sent.every(Boolean)) await endSession();
     else {
@@ -219,12 +237,13 @@ export default function App() {
   let shown;
   if (screen === 'mahjong') {
     shown = (
-      <GameBoundary name="Mahjong" onNewGame={mahjong.giveUp} onHome={goHome}>
+      <GameBoundary name="Mahjong" onNewGame={trackedMahjong.giveUp} onHome={goHome}>
       <Mahjong
         level={mahjongLevel}
         onLevel={setMahjongLevel}
         game={mahjong.state}
-        onGame={mahjong.setState}
+        onGame={trackedMahjong.onGame}
+        tracker={trackedMahjong.tracker}
         ready={mahjong.ready}
         online={online}
         unplayable={mahjong.unplayable}
@@ -234,10 +253,11 @@ export default function App() {
     );
   } else if (screen === 'solitaire') {
     shown = (
-      <GameBoundary name="Solitaire" onNewGame={solitaire.giveUp} onHome={goHome}>
+      <GameBoundary name="Solitaire" onNewGame={trackedSolitaire.giveUp} onHome={goHome}>
       <SolitaireGame
         game={solitaire.state}
-        onGame={solitaire.setState}
+        onGame={trackedSolitaire.onGame}
+        tracker={trackedSolitaire.tracker}
         ready={solitaire.ready}
         // A load answered from the device knows nothing of the server's game, and a deal now
         // would be saved over it. No new deal until the server itself has answered.
@@ -250,10 +270,11 @@ export default function App() {
     );
   } else if (screen === 'sudoku') {
     shown = (
-      <GameBoundary name="Sudoku" onNewGame={sudoku.giveUp} onHome={goHome}>
+      <GameBoundary name="Sudoku" onNewGame={trackedSudoku.giveUp} onHome={goHome}>
       <SudokuGame
         game={sudoku.state}
-        onGame={sudoku.setState}
+        onGame={trackedSudoku.onGame}
+        tracker={trackedSudoku.tracker}
         ready={sudoku.ready}
         online={online}
         unplayable={sudoku.unplayable}

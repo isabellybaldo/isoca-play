@@ -16,6 +16,7 @@ import {
   type Tile,
 } from './rules';
 import { faceName, TileArt, TileBack } from './TileArt';
+import { useOnScreen, type Tracker } from '../stats/useTracked';
 import { mahjongTip, type MahjongTip } from './tips';
 import './mahjong.css';
 
@@ -126,13 +127,16 @@ export default function MahjongGame({
   onChange,
   online = true,
   onBack,
+  tracker,
 }: {
   layout: Layout;
   state: MahjongState;
   onChange: (update: (s: MahjongState) => MahjongState) => void;
   online?: boolean;
   onBack: () => void;
+  tracker?: Tracker;
 }) {
+  useOnScreen(tracker);
   const [viewport, setViewport] = useState(measureViewport);
   const [asking, setAsking] = useState(false);
   const [starting, setStarting] = useState(false);
@@ -236,7 +240,10 @@ export default function MahjongGame({
               type="button"
               className="back"
               disabled={state.status !== 'playing'}
-              onClick={own(() => setTip({ ...mahjongTip(state), onBoard: state.onBoard, slots: state.slots }))}
+              onClick={own(() => {
+                tracker?.tip();
+                setTip({ ...mahjongTip(state), onBoard: state.onBoard, slots: state.slots });
+              })}
             >
               Tip
             </button>
