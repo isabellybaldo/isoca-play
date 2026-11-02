@@ -3,6 +3,9 @@
 // On a save the worker answered from the device, when the network could not.
 export const CACHED_HEADER = 'X-Isoca-Cached';
 
+// Finished games waiting for the server (see stats/outbox.ts). Logging out clears the device.
+export const OUTBOX_KEY = 'isoca-play-stats-outbox';
+
 // After the page has loaded, so storing the app does not compete with starting it. This
 // page only loads with a session or from the cache, so nothing registers before a login.
 export function registerWorker(): void {
@@ -36,6 +39,11 @@ function tell(worker: ServiceWorker): Promise<void> {
 // Worker first, so it cannot store anything after its caches are gone. Each step carries
 // on past a failure: the session has already ended, and the rest should still go.
 export async function clearDevice(): Promise<void> {
+  try {
+    localStorage.removeItem(OUTBOX_KEY);
+  } catch {
+    // Storage denied: there is no outbox to clear.
+  }
   try {
     const registrations = (await navigator.serviceWorker?.getRegistrations()) ?? [];
     const running = registrations.flatMap((r) => [r.installing, r.waiting, r.active].filter((w) => w != null));
