@@ -33,13 +33,13 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-type Props = { ready?: boolean; online?: boolean; unplayable?: boolean; onBack?: () => void };
+type Props = { ready?: boolean; online?: boolean; unplayable?: boolean; onBack?: () => void; check?: () => Promise<boolean> };
 
 // The game itself lives above the screen; this stands in for App.
-function Holder({ start = null, ready = true, online = true, unplayable = false, onBack = () => {} }: Props & { start?: SolitaireState | null }) {
+function Holder({ start = null, ready = true, online = true, unplayable = false, onBack = () => {}, check = async () => true }: Props & { start?: SolitaireState | null }) {
   const [game, set] = useState(start);
   holding = { game, set };
-  return <SolitaireGame game={game} onGame={set} ready={ready} online={online} unplayable={unplayable} onBack={onBack} />;
+  return <SolitaireGame game={game} onGame={set} ready={ready} online={online} unplayable={unplayable} check={check} onBack={onBack} />;
 }
 
 const settle = () =>
@@ -172,6 +172,106 @@ describe('opening', () => {
     server.answer = ({ path }) => (path === '/api/new/solitaire' ? 401 : undefined);
     await open(null);
     expect(line()).toBe('Log in again to start a new game.');
+  });
+});
+
+describe('before the first deal', () => {
+  test('no deal until the check has answered, and New game waits for it', async () => {
+    let answer = (_clear: boolean) => {};
+    const check = () => new Promise<boolean>((resolve) => (answer = resolve));
+    await open(null, { check });
+    expect(deals()).toEqual([]);
+    expect(button('New game').disabled).toBe(true);
+    await act(async () => answer(true));
+    await settle();
+    expect(deals()).toHaveLength(1);
+  });
+
+  test('a check that says no deals nothing, and coming back online asks again', async () => {
+    const check = vi.fn(async () => false);
+    const { rerender } = render(<Holder check={check} />);
+    await settle();
+    expect(deals()).toEqual([]);
+    expect(line()).toBe('');
+    expect(button('New game').disabled).toBe(false);
+
+    check.mockImplementation(async () => true);
+    rerender(<Holder check={check} online={false} />);
+    await settle();
+    rerender(<Holder check={check} online />);
+    await settle();
+    expect(check).toHaveBeenCalledTimes(2);
+    expect(deals()).toHaveLength(1);
+  });
+
+  test('a check that fails deals nothing and shows the note', async () => {
+    await open(null, { check: () => Promise.reject(new Error('no answer')) });
+    expect(deals()).toEqual([]);
+    expect(line()).toBe('That did not work. Try again.');
+  });
+
+  test('New game by tap does not check', async () => {
+    const check = vi.fn(async () => true);
+    const user = await open(FRESH, { check });
+    await user.click(button('New game'));
+    await settle();
+    expect(check).not.toHaveBeenCalled();
+    expect(deals()).toHaveLength(1);
+  });
+});
+
+describe('a screen too short for the longest column', () => {
+  const sized = (width: number, height: number) => {
+    window.innerWidth = width;
+    window.innerHeight = height;
+  };
+  afterEach(() => sized(1024, 768));
+
+  test('says to turn the phone, and play stays allowed', async () => {
+    sized(740, 360);
+    const user = await open(PLAYED);
+    expect(line()).toBe('Turn the phone upright.');
+    await user.click(button('Pile, 23 cards'));
+    expect(holding.game!.history).toHaveLength(2);
+  });
+
+  test('says nothing upright, or with no cards on the table', async () => {
+    sized(360, 640);
+    await open(PLAYED);
+    expect(line()).toBe('');
+    cleanup();
+    sized(740, 360);
+    await open(null, { unplayable: true });
+    expect(line()).toBe('The saved game could not be opened.');
+  });
+
+  test('follows a turn of the phone', async () => {
+    sized(360, 640);
+    await open(PLAYED);
+    sized(740, 360);
+    act(() => void window.dispatchEvent(new Event('resize')));
+    expect(line()).toBe('Turn the phone upright.');
+  });
+
+  test('a tip, a win and a problem are shown over it', async () => {
+    sized(740, 360);
+    server.answer = ({ path }) => (path === '/api/new/solitaire' ? 503 : undefined);
+    const user = await open(FRESH);
+    await user.click(button('Tip'));
+    expect(line()).not.toBe('Turn the phone upright.');
+    expect(line()!.length).toBeGreaterThan(0);
+    await user.click(button('New game'));
+    await settle();
+    expect(line()).toBe('That did not work. Try again.');
+    cleanup();
+    await open(WON);
+    expect(line()).toBe('You won.');
+  });
+
+  test('it takes the place of the offline note', async () => {
+    sized(740, 360);
+    await open(PLAYED, { online: false });
+    expect(line()).toBe('Turn the phone upright.');
   });
 });
 

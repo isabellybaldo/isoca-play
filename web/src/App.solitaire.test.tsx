@@ -1,3 +1,4 @@
+import { StrictMode } from 'react';
 import { act, cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, test, vi } from 'vitest';
@@ -120,6 +121,106 @@ describe('a load answered from the device says nothing about the server', () => 
     await past1s();
     expect(button('Pile, 24 cards')).toBeTruthy();
     expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+  });
+});
+
+// A tab that loaded "no save" and has had no wake since: only the screen opening can ask again.
+describe('the first deal asks the server again', () => {
+  const noDealNoSave = (server: ReturnType<typeof fakeServer>) => {
+    expect(server.requests.some((r) => r.path === '/api/new/solitaire')).toBe(false);
+    expect(server.puts('solitaire')).toEqual([]);
+  };
+  const askedSolitaire = (server: ReturnType<typeof fakeServer>) =>
+    server.requests.filter((r) => r.method === 'GET' && r.path === '/api/save/solitaire').length;
+
+  test('a game started elsewhere since the load is shown, with nothing sent', async () => {
+    const saved = tapPile(newSolitaire(DEALS[0]));
+    const server = fakeServer();
+    await open();
+    server.saves.solitaire = saved;
+    await userEvent.setup().click(button('Solitaire'));
+    await settle();
+    expect(button('Pile, 23 cards')).toBeTruthy();
+    noDealNoSave(server);
+    expect(server.saves.solitaire).toEqual(saved);
+  });
+
+  test('an unreadable save that has appeared is left alone', async () => {
+    const server = fakeServer();
+    await open();
+    server.saves.solitaire = { nonsense: true };
+    await userEvent.setup().click(button('Solitaire'));
+    await settle();
+    expect(screen.getByText('The saved game could not be opened.')).toBeTruthy();
+    noDealNoSave(server);
+  });
+
+  test('nothing on the server still deals once with no tap, under StrictMode', async () => {
+    const server = fakeServer();
+    render(
+      <StrictMode>
+        <App />
+      </StrictMode>,
+    );
+    await settle();
+    const before = askedSolitaire(server);
+    await userEvent.setup().click(button('Solitaire'));
+    await settle();
+    expect(askedSolitaire(server)).toBe(before + 1);
+    expect(server.requests.filter((r) => r.path === '/api/new/solitaire')).toHaveLength(1);
+    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+    expect(button('Pile, 24 cards')).toBeTruthy();
+  });
+
+  test('a cached answer deals nothing, says so, and the real answer then decides', async () => {
+    const server = fakeServer();
+    await open();
+    server.worker = { solitaire: null };
+    await userEvent.setup().click(button('Solitaire'));
+    await settle();
+    noDealNoSave(server);
+    expect(screen.getByText('New games need a connection.')).toBeTruthy();
+
+    server.worker = null;
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    });
+    expect(button('Pile, 24 cards')).toBeTruthy();
+    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[0])]);
+  });
+
+  test('a failed ask deals nothing and shows the note', async () => {
+    const server = fakeServer();
+    await open();
+    server.answer = ({ method, path }) => (method === 'GET' && path === '/api/save/solitaire' ? 503 : undefined);
+    await userEvent.setup().click(button('Solitaire'));
+    await settle();
+    noDealNoSave(server);
+    expect(screen.getByText('That did not work. Try again.')).toBeTruthy();
+  });
+
+  test('a logged out ask says to log in', async () => {
+    const server = fakeServer();
+    await open();
+    server.answer = ({ method, path }) => (method === 'GET' && path === '/api/save/solitaire' ? 401 : undefined);
+    await userEvent.setup().click(button('Solitaire'));
+    await settle();
+    noDealNoSave(server);
+    expect(screen.getByText('Log in again to start a new game.')).toBeTruthy();
+  });
+
+  test('New game by tap needs no second ask', async () => {
+    const saved = newSolitaire(DEALS[0]);
+    const server = fakeServer({ solitaire: saved });
+    const user = userEvent.setup();
+    await open();
+    await user.click(button('Solitaire'));
+    await settle();
+    const before = askedSolitaire(server);
+    await user.click(button('New game'));
+    await settle();
+    expect(askedSolitaire(server)).toBe(before);
+    expect(server.puts('solitaire')).toEqual([newSolitaire(DEALS[1])]);
   });
 });
 

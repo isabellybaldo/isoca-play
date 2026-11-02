@@ -19,6 +19,16 @@ function measureViewport() {
   };
 }
 
+export function useViewport() {
+  const [viewport, setViewport] = useState(measureViewport);
+  useEffect(() => {
+    const measure = () => setViewport(measureViewport());
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, []);
+  return viewport;
+}
+
 // A tip belongs to the position it was asked in, so any move or Return drops it.
 export function useTip(state: SolitaireState | null): { tip: Tip | null; ask: () => void } {
   const [held, setHeld] = useState<{ tip: Tip; history: SolitaireState['history'] } | null>(null);
@@ -64,17 +74,11 @@ export default function SolitaireTable({
   onChange: (update: (s: SolitaireState) => SolitaireState) => void;
   tip?: Tip | null;
 }) {
-  const [viewport, setViewport] = useState(measureViewport);
+  const viewport = useViewport();
   const [drag, setDrag] = useState<{ pile: Pile; n: number; dx: number; dy: number } | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
   const press = useRef<Press | null>(null);
   const lastTap = useRef<{ pile: Pile; card: number; at: number } | null>(null);
-
-  useEffect(() => {
-    const measure = () => setViewport(measureViewport());
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, []);
 
   useEffect(() => {
     const root = document.documentElement;
@@ -258,7 +262,7 @@ export default function SolitaireTable({
       <button
         type="button"
         data-pile="stock"
-        aria-label={state.stock.length > 0 ? `Pile, ${state.stock.length} cards` : 'Empty pile, tap to turn back'}
+        aria-label={state.stock.length > 0 ? `Pile, ${state.stock.length} ${state.stock.length === 1 ? 'card' : 'cards'}` : 'Empty pile, tap to turn back'}
         className={tip?.kind === 'turn' ? 'sol-card sol-tip' : 'sol-card'}
         style={place(0, 0)}
         onPointerDown={(event) => begin(event, null)}

@@ -30,6 +30,13 @@ export function cardScale(vw: number, vh: number): 2 | 3 | 4 {
   return 2;
 }
 
+// Sideways, with the worst column longer than even 2x can fit. The page doesn't scroll, so the
+// end of such a column can't be reached this way up.
+export function tooShortSideways(vw: number, vh: number): boolean {
+  const room = vh - TABLE_CHROME - (SPRITE.height * 2 + 6);
+  return vw > vh && columnHeight(WORST, 2, { down: MIN_DOWN_ROWS * 2, up: MIN_UP_ROWS * 2 }) > room;
+}
+
 // A column's width, which is also its tap area. The brief's min(card + 8, ...) would give a 2x
 // card only 40 px, so the cap is raised to 44 px, the least a finger needs.
 const MIN_TAP = 44;

@@ -713,3 +713,77 @@ describe('offline, with the worker answering', () => {
     second.unmount();
   });
 });
+
+describe('check', () => {
+  const solitaire = async () => {
+    const view = renderHook(() => useSavedGame('solitaire'));
+    await pass();
+    return view;
+  };
+  const answer = async (check: () => Promise<boolean>) => {
+    const outcome = check().catch((error: unknown) => error);
+    await pass();
+    return outcome;
+  };
+  const SAVE = newSolitaire(Array.from({ length: 52 }, (_, i) => i));
+
+  test('true only when the server itself says it holds nothing', async () => {
+    fakeServer();
+    const { result } = await solitaire();
+    expect(await answer(result.current.check)).toBe(true);
+  });
+
+  test('a game that has appeared is taken, and the answer is false', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    server.saves.solitaire = SAVE;
+    expect(await answer(result.current.check)).toBe(false);
+    expect(result.current.state).toEqual(SAVE);
+  });
+
+  test('a cached answer is false', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    server.worker = { solitaire: null };
+    expect(await answer(result.current.check)).toBe(false);
+  });
+
+  test('no answer rejects', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    server.answer = () => 503;
+    expect(await answer(result.current.check)).toBeInstanceOf(Error);
+  });
+
+  test('a check made during another request waits for an answer of its own', async () => {
+    const server = fakeServer();
+    const { result } = await solitaire();
+    let release = () => {};
+    server.gate = new Promise<void>((resolve) => (release = resolve));
+    const first = result.current.check();
+    await pass();
+    const second = result.current.check();
+    await pass();
+    server.gate = null;
+    server.saves.solitaire = SAVE; // the second ask, not the first, is the one that can see this
+    release();
+    await pass();
+    await first;
+    expect(await second).toBe(false);
+    expect(result.current.state).toEqual(SAVE);
+  });
+
+  test('leaving ends a check that is still waiting', async () => {
+    const server = fakeServer();
+    const { result, unmount } = await solitaire();
+    let release = () => {};
+    server.gate = new Promise<void>((resolve) => (release = resolve));
+    void result.current.check();
+    await pass();
+    const late = result.current.check();
+    unmount();
+    expect(await late).toBe(false);
+    release();
+    await pass();
+  });
+});

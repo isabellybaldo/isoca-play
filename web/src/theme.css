@@ -107,7 +107,7 @@ button {
 .game-name { display: block; font-family: var(--px); font-size: 16px; line-height: 1.4; }
 .game-line { display: block; font-family: var(--big); font-size: 24px; line-height: 1.1; color: var(--dim); }
 
-/* A loose heap of tiles, each lying over the last */
+/* A loose heap of tiles or cards, each lying over the last */
 .heap { position: absolute; width: 54px; height: 69px; }
 .heap.card-heap { width: 48px; height: 72px; }
 .heap:nth-child(1) { left: 0; top: 48px; }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TABLE_CHROME, cardScale, cellWidth, columnPitches } from './layout';
+import { TABLE_CHROME, cardScale, cellWidth, columnPitches, tooShortSideways } from './layout';
 
 describe('card sizes', () => {
   it('picks the scale from the screen', () => {
@@ -27,5 +27,22 @@ describe('card sizes', () => {
 
   it('keeps the tap area wide', () => {
     expect(cellWidth(320, 2)).toBeGreaterThanOrEqual(44);
+  });
+});
+
+describe('a landscape screen too short for the worst column', () => {
+  it('is told apart from one that fits', () => {
+    expect(tooShortSideways(740, 360)).toBe(true);
+    expect(tooShortSideways(320, 568)).toBe(false);
+    expect(tooShortSideways(360, 640)).toBe(false);
+  });
+
+  it('turns on the worst column at 2x: 276 px, under 170 px of chrome and top row', () => {
+    expect(tooShortSideways(1000, 446)).toBe(false);
+    expect(tooShortSideways(1000, 445)).toBe(true);
+  });
+
+  it('is never said to a screen already upright, however short', () => {
+    expect(tooShortSideways(320, 400)).toBe(false);
   });
 });

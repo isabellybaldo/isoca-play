@@ -243,6 +243,7 @@ export default function App() {
         // would be saved over it. No new deal until the server itself has answered.
         online={online && solitaire.saving !== 'offline'}
         unplayable={solitaire.unplayable}
+        check={solitaire.check}
         onBack={goHome}
       />
       </GameBoundary>

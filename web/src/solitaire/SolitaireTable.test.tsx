@@ -101,7 +101,7 @@ describe('the pile', () => {
     tap(named('Pile, 2 cards'));
     expect(game.state().waste).toEqual([card(5, HEART)]);
     expect(game.state().history).toEqual(['d']);
-    expect(named('Pile, 1 cards')).toBeTruthy();
+    expect(named('Pile, 1 card')).toBeTruthy();
   });
 
   test('a tap on the empty pile turns it back', () => {
@@ -114,7 +114,7 @@ describe('the pile', () => {
   test('two fast taps on the pile turn two cards, and neither sends anything', () => {
     const game = play(table({ stock: [card(1, HEART), card(1, SPADE)] }));
     tap(named('Pile, 2 cards'));
-    tap(named('Pile, 1 cards'));
+    tap(named('Pile, 1 card'));
     expect(game.state().waste).toEqual([card(1, HEART), card(1, SPADE)]);
     expect(game.state().foundations).toEqual([0, 0, 0, 0]);
   });
@@ -122,7 +122,7 @@ describe('the pile', () => {
   test('a press on the pile that slides away does not turn a card', () => {
     const start = table({ stock: [card(5, HEART)] });
     const game = play(start);
-    fireEvent.pointerDown(named('Pile, 1 cards'), { pointerId: 1, clientX: 10, clientY: 10 });
+    fireEvent.pointerDown(named('Pile, 1 card'), { pointerId: 1, clientX: 10, clientY: 10 });
     fireEvent.pointerMove(tableEl(), { pointerId: 1, clientX: 60, clientY: 10 });
     fireEvent.pointerUp(tableEl(), { pointerId: 1, clientX: 10, clientY: 10 });
     expect(game.state()).toBe(start);
@@ -560,7 +560,7 @@ describe('tips', () => {
 
   test('a turn tip highlights the pile', () => {
     render(<SolitaireTable state={table({ stock: [card(5, CLUB)] })} tip={{ kind: 'turn', line: '' }} onChange={() => {}} />);
-    expect(highlighted()).toEqual(['Pile, 1 cards']);
+    expect(highlighted()).toEqual(['Pile, 1 card']);
   });
 
   test('a none tip highlights nothing', () => {
